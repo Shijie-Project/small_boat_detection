@@ -7,17 +7,16 @@ Copyright(c) 2024 The D-FINE Authors. All Rights Reserved.
 """
 
 import atexit
+import datetime
 import os
 import random
 import time
-import datetime
 
 import numpy as np
 import torch
 import torch.backends.cudnn
 import torch.distributed
 import torch.nn as nn
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.nn.parallel import DataParallel as DP
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DistributedSampler
@@ -266,9 +265,7 @@ def check_compile():
         if device_cap in ((7, 0), (8, 0), (9, 0)):
             gpu_ok = True
     if not gpu_ok:
-        warnings.warn(
-            "GPU is not NVIDIA V100, A100, or H100. Speedup numbers may be lower " "than expected."
-        )
+        warnings.warn("GPU is not NVIDIA V100, A100, or H100. Speedup numbers may be lower than expected.")
     return gpu_ok
 
 

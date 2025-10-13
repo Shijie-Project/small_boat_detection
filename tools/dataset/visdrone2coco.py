@@ -1,9 +1,10 @@
+import json
 import os
+
 import cv2
 from tqdm import tqdm
-import json
- 
- 
+
+
 def convert_to_cocodetection(dir, output_dir):
     train_dir = os.path.join(dir, "VisDrone2019-DET-train")
     val_dir = os.path.join(dir, "VisDrone2019-DET-val")
@@ -12,19 +13,19 @@ def convert_to_cocodetection(dir, output_dir):
     train_images = os.path.join(train_dir, "images")
     val_images = os.path.join(val_dir, "images")
     id_num = 0
- 
+
     categories = [
-            {"id": 1, "name": "pedestrian", "supercategory": "nark"},
-            {"id": 2, "name": "people", "supercategory": "nark"},
-            {"id": 3, "name": "bicycle", "supercategory": "nark"},
-            {"id": 4, "name": "car", "supercategory": "nark"},
-            {"id": 5, "name": "van", "supercategory": "nark"},
-            {"id": 6, "name": "truck", "supercategory": "nark"},
-            {"id": 7, "name": "tricycle", "supercategory": "nark"},
-            {"id": 8, "name": "awning-tricycle", "supercategory": "nark"},
-            {"id": 9, "name": "bus", "supercategory": "nark"},
-            {"id": 10, "name": "motor", "supercategory": "nark"}
-        ]
+        {"id": 1, "name": "pedestrian", "supercategory": "nark"},
+        {"id": 2, "name": "people", "supercategory": "nark"},
+        {"id": 3, "name": "bicycle", "supercategory": "nark"},
+        {"id": 4, "name": "car", "supercategory": "nark"},
+        {"id": 5, "name": "van", "supercategory": "nark"},
+        {"id": 6, "name": "truck", "supercategory": "nark"},
+        {"id": 7, "name": "tricycle", "supercategory": "nark"},
+        {"id": 8, "name": "awning-tricycle", "supercategory": "nark"},
+        {"id": 9, "name": "bus", "supercategory": "nark"},
+        {"id": 10, "name": "motor", "supercategory": "nark"},
+    ]
     for mode in ["train", "val"]:
         images = []
         annotations = []
@@ -38,7 +39,7 @@ def convert_to_cocodetection(dir, output_dir):
             annotations_path = val_annotations
             images_path = val_images
         for idx, i in enumerate(tqdm(set)):
-            f = open(annotations_path + "/" + i, "r")
+            f = open(annotations_path + "/" + i)
             name = i.replace(".txt", "")
             image = {}
             height, width = cv2.imread(images_path + "/" + name + ".jpg").shape[:2]
@@ -72,21 +73,21 @@ def convert_to_cocodetection(dir, output_dir):
         dataset_dict["annotations"] = annotations
         dataset_dict["categories"] = categories
         json_str = json.dumps(dataset_dict)
-        with open(f'{output_dir}/VisDrone2019-DET_{mode}_coco.json', 'w') as json_file:
+        with open(f"{output_dir}/VisDrone2019-DET_{mode}_coco.json", "w") as json_file:
             json_file.write(json_str)
     print("json file write done...")
- 
- 
+
+
 def get_test_namelist(dir, out_dir):
     full_path = out_dir + "/" + "test.txt"
-    file = open(full_path, 'w')
+    file = open(full_path, "w")
     for name in tqdm(os.listdir(dir)):
         name = name.replace(".txt", "")
         file.write(name + "\n")
     file.close()
     return None
- 
- 
+
+
 def centerxywh_to_xyxy(boxes):
     """
     args:
@@ -99,8 +100,8 @@ def centerxywh_to_xyxy(boxes):
     x_bottom_right = boxes[0] + boxes[2] / 2
     y_bottom_right = boxes[1] + boxes[3] / 2
     return [x_top_left, y_top_left, x_bottom_right, y_bottom_right]
- 
- 
+
+
 def centerxywh_to_topleftxywh(boxes):
     """
     args:
@@ -113,8 +114,8 @@ def centerxywh_to_topleftxywh(boxes):
     width = boxes[2]
     height = boxes[3]
     return [x_top_left, y_top_left, width, height]
- 
- 
+
+
 def clamp(coord, width, height):
     if coord[0] < 0:
         coord[0] = 0
@@ -125,7 +126,9 @@ def clamp(coord, width, height):
     if coord[3] > height:
         coord[3] = height
     return coord
- 
- 
-if __name__ == '__main__':
-    convert_to_cocodetection(r"/mnt/d/tinydetection/datasets/visdrone",r"/mnt/d/tinydetection/datasets/visdrone/annotations_coco")
+
+
+if __name__ == "__main__":
+    convert_to_cocodetection(
+        r"/mnt/d/tinydetection/datasets/visdrone", r"/mnt/d/tinydetection/datasets/visdrone/annotations_coco"
+    )

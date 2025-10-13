@@ -10,14 +10,15 @@ import contextlib
 import copy
 import os
 
-from pycocotools import mask as mask_util
 import numpy as np
 import torch
+from pycocotools import mask as mask_util
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
 
 from ...core import register
 from ...misc import dist_utils
+
 
 __all__ = [
     "CocoEvaluatorSlow",
@@ -25,7 +26,7 @@ __all__ = [
 
 
 @register()
-class CocoEvaluatorSlow(object):
+class CocoEvaluatorSlow:
     def __init__(self, coco_gt, iou_types):
         assert isinstance(iou_types, (list, tuple))
         coco_gt = copy.deepcopy(coco_gt)
@@ -34,9 +35,7 @@ class CocoEvaluatorSlow(object):
 
         self.coco_eval = {}
         for iou_type in iou_types:
-            self.coco_eval[iou_type] = COCOeval(
-                coco_gt, iouType=iou_type, print_function=print, separate_eval=True
-            )
+            self.coco_eval[iou_type] = COCOeval(coco_gt, iouType=iou_type, print_function=print, separate_eval=True)
 
         self.img_ids = []
         self.eval_imgs = {k: [] for k in iou_types}
@@ -89,7 +88,7 @@ class CocoEvaluatorSlow(object):
 
     def summarize(self):
         for iou_type, coco_eval in self.coco_eval.items():
-            print("IoU metric: {}".format(iou_type))
+            print(f"IoU metric: {iou_type}")
             coco_eval.summarize()
 
     def prepare(self, predictions, iou_type):
@@ -100,7 +99,7 @@ class CocoEvaluatorSlow(object):
         elif iou_type == "keypoints":
             return self.prepare_for_coco_keypoint(predictions)
         else:
-            raise ValueError("Unknown iou type {}".format(iou_type))
+            raise ValueError(f"Unknown iou type {iou_type}")
 
     def prepare_for_coco_detection(self, predictions):
         coco_results = []
@@ -142,8 +141,7 @@ class CocoEvaluatorSlow(object):
             labels = prediction["labels"].tolist()
 
             rles = [
-                mask_util.encode(np.array(mask[0, :, :, np.newaxis], dtype=np.uint8, order="F"))[0]
-                for mask in masks
+                mask_util.encode(np.array(mask[0, :, :, np.newaxis], dtype=np.uint8, order="F"))[0] for mask in masks
             ]
             for rle in rles:
                 rle["counts"] = rle["counts"].decode("utf-8")

@@ -146,7 +146,7 @@ def main(args):
         # Try to open the input as an image
         im_pil = Image.open(input_path).convert("RGB")
         process_image(sess, im_pil)
-    except IOError:
+    except OSError:
         # Not an image, process as video
         process_video(sess, input_path)
 
@@ -156,8 +156,6 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--onnx", type=str, required=True, help="Path to the ONNX model file.")
-    parser.add_argument(
-        "--input", type=str, required=True, help="Path to the input image or video file."
-    )
+    parser.add_argument("--input", type=str, required=True, help="Path to the input image or video file.")
     args = parser.parse_args()
     main(args)

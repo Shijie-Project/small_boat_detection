@@ -7,7 +7,8 @@ import functools
 import importlib
 import inspect
 from collections import defaultdict
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 
 GLOBAL_CONFIG = defaultdict(dict)
 
@@ -99,7 +100,7 @@ def create(type_or_name, global_cfg=GLOBAL_CONFIG, **kwargs):
         if hasattr(global_cfg[name], "__dict__"):
             return global_cfg[name]
     else:
-        raise ValueError("The module {} is not registered".format(name))
+        raise ValueError(f"The module {name} is not registered")
 
     cfg = global_cfg[name]
 

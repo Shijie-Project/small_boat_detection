@@ -6,6 +6,7 @@ Copyright(c) 2024 The D-FINE Authors. All Rights Reserved.
 import os
 import sys
 
+
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 
 import argparse
@@ -14,40 +15,15 @@ from src.core import YAMLConfig, yaml_utils
 from src.misc import dist_utils
 from src.solver import TASKS
 
-debug = False
 
-if debug:
-    import torch
-
-    def custom_repr(self):
-        return f"{{Tensor:{tuple(self.shape)}}} {original_repr(self)}"
-
-    original_repr = torch.Tensor.__repr__
-    torch.Tensor.__repr__ = custom_repr
-
-
-def main(
-    args,
-) -> None:
+def main(args) -> None:
     """main"""
     dist_utils.setup_distributed(args.print_rank, args.print_method, seed=args.seed)
 
-    assert not all(
-        [args.tuning, args.resume]
-    ), "Only support from_scrach or resume or tuning at one time"
+    assert not all([args.tuning, args.resume]), "Only support from_scrach or resume or tuning at one time"
 
     update_dict = yaml_utils.parse_cli(args.update)
-    update_dict.update(
-        {
-            k: v
-            for k, v in args.__dict__.items()
-            if k
-            not in [
-                "update",
-            ]
-            and v is not None
-        }
-    )
+    update_dict.update({k: v for k, v in args.__dict__.items() if k not in ["update"] and v is not None})
 
     cfg = YAMLConfig(args.config, **update_dict)
 

@@ -3,15 +3,15 @@ Copied from D-FINE (https://github.com/Peterande/D-FINE)
 Copyright(c) 2024 The D-FINE Authors. All Rights Reserved.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-import torch
 import torch.nn as nn
 import torchvision
 import torchvision.transforms.v2 as T
 
 from ...core import GLOBAL_CONFIG, register
 from ._transforms import EmptyTransform
+
 
 torchvision.disable_beta_transforms_warning()
 
@@ -24,9 +24,7 @@ class Compose(T.Compose):
             for op in ops:
                 if isinstance(op, dict):
                     name = op.pop("type")
-                    transfom = getattr(
-                        GLOBAL_CONFIG[name]["_pymodule"], GLOBAL_CONFIG[name]["_name"]
-                    )(**op)
+                    transfom = getattr(GLOBAL_CONFIG[name]["_pymodule"], GLOBAL_CONFIG[name]["_name"])(**op)
                     transforms.append(transfom)
                     op["type"] = name
 

@@ -84,9 +84,7 @@ class DomeCriterion(nn.Module):
         )
         target_classes[idx] = target_classes_o
         target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
-        loss = torchvision.ops.sigmoid_focal_loss(
-            src_logits, target, self.alpha, self.gamma, reduction="none"
-        )
+        loss = torchvision.ops.sigmoid_focal_loss(src_logits, target, self.alpha, self.gamma, reduction="none")
         loss = loss.mean(1).sum() * src_logits.shape[1] / num_boxes
 
         return {"loss_focal": loss}
@@ -117,28 +115,26 @@ class DomeCriterion(nn.Module):
         pred_score = F.sigmoid(src_logits).detach()
         weight = self.alpha * pred_score.pow(self.gamma) * (1 - target) + target_score
 
-        loss = F.binary_cross_entropy_with_logits(
-            src_logits, target_score, weight=weight, reduction="none"
-        )
+        loss = F.binary_cross_entropy_with_logits(src_logits, target_score, weight=weight, reduction="none")
         loss = loss.mean(1).sum() * src_logits.shape[1] / num_boxes
         return {"loss_vfl": loss}
 
-    
     def loss_labels_mal(self, outputs, targets, indices, num_boxes, values=None):
-        assert 'pred_boxes' in outputs
+        assert "pred_boxes" in outputs
         idx = self._get_src_permutation_idx(indices)
         if values is None:
-            src_boxes = outputs['pred_boxes'][idx]
-            target_boxes = torch.cat([t['boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)
+            src_boxes = outputs["pred_boxes"][idx]
+            target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
             ious, _ = box_iou(box_cxcywh_to_xyxy(src_boxes), box_cxcywh_to_xyxy(target_boxes))
             ious = torch.diag(ious).detach()
         else:
             ious = values
 
-        src_logits = outputs['pred_logits']
+        src_logits = outputs["pred_logits"]
         target_classes_o = torch.cat([t["labels"][J] for t, (_, J) in zip(targets, indices)])
-        target_classes = torch.full(src_logits.shape[:2], self.num_classes,
-                                    dtype=torch.int64, device=src_logits.device)
+        target_classes = torch.full(
+            src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
+        )
         target_classes[idx] = target_classes_o
         target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
 
@@ -154,10 +150,9 @@ class DomeCriterion(nn.Module):
             weight = pred_score.pow(self.gamma) * (1 - target) + target
 
         # print(" ### DEIM-gamma{}-alpha{} ### ".format(self.gamma, self.mal_alpha))
-        loss = F.binary_cross_entropy_with_logits(src_logits, target_score, weight=weight, reduction='none')
+        loss = F.binary_cross_entropy_with_logits(src_logits, target_score, weight=weight, reduction="none")
         loss = loss.mean(1).sum() * src_logits.shape[1] / num_boxes
-        return {'loss_mal': loss}
-
+        return {"loss_mal": loss}
 
     def loss_boxes(self, outputs, targets, indices, num_boxes, boxes_weight=None):
         """Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss
@@ -209,14 +204,10 @@ class DomeCriterion(nn.Module):
                         outputs["up"],
                     )
 
-            target_corners, weight_right, weight_left = (
-                self.fgl_targets_dn if "is_dn" in outputs else self.fgl_targets
-            )
+            target_corners, weight_right, weight_left = self.fgl_targets_dn if "is_dn" in outputs else self.fgl_targets
 
             ious = torch.diag(
-                box_iou(
-                    box_cxcywh_to_xyxy(outputs["pred_boxes"][idx]), box_cxcywh_to_xyxy(target_boxes)
-                )[0]
+                box_iou(box_cxcywh_to_xyxy(outputs["pred_boxes"][idx]), box_cxcywh_to_xyxy(target_boxes))[0]
             )
             weight_targets = ious.unsqueeze(-1).repeat(1, 1, 4).reshape(-1).detach()
 
@@ -244,9 +235,7 @@ class DomeCriterion(nn.Module):
                     weight_targets_local[idx] = ious.reshape_as(weight_targets_local[idx]).to(
                         weight_targets_local.dtype
                     )
-                    weight_targets_local = (
-                        weight_targets_local.unsqueeze(-1).repeat(1, 1, 4).reshape(-1).detach()
-                    )
+                    weight_targets_local = weight_targets_local.unsqueeze(-1).repeat(1, 1, 4).reshape(-1).detach()
 
                     loss_match_local = (
                         weight_targets_local
@@ -259,21 +248,18 @@ class DomeCriterion(nn.Module):
                         ).sum(-1)
                     )
                     if "is_dn" not in outputs:
-                        batch_scale = (
-                            8 / outputs["pred_boxes"].shape[0]
-                        )  # Avoid the influence of batch size per GPU
+                        batch_scale = 8 / outputs["pred_boxes"].shape[0]  # Avoid the influence of batch size per GPU
                         self.num_pos, self.num_neg = (
                             (mask.sum() * batch_scale) ** 0.5,
                             ((~mask).sum() * batch_scale) ** 0.5,
                         )
                     loss_match_local1 = loss_match_local[mask].mean() if mask.any() else 0
                     loss_match_local2 = loss_match_local[~mask].mean() if (~mask).any() else 0
-                    losses["loss_ddf"] = (
-                        loss_match_local1 * self.num_pos + loss_match_local2 * self.num_neg
-                    ) / (self.num_pos + self.num_neg)
+                    losses["loss_ddf"] = (loss_match_local1 * self.num_pos + loss_match_local2 * self.num_neg) / (
+                        self.num_pos + self.num_neg
+                    )
 
         return losses
-
 
     def _get_src_permutation_idx(self, indices):
         # permute predictions following indices
@@ -320,8 +306,8 @@ class DomeCriterion(nn.Module):
             "boxes": self.loss_boxes,
             "focal": self.loss_labels_focal,
             "vfl": self.loss_labels_vfl,
-            'mal': self.loss_labels_mal,
-            "local": self.loss_local
+            "mal": self.loss_labels_mal,
+            "local": self.loss_local,
         }
         assert loss in loss_map, f"do you really want to compute {loss} loss?"
         return loss_map[loss](outputs, targets, indices, num_boxes, **kwargs)
@@ -364,9 +350,7 @@ class DomeCriterion(nn.Module):
 
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["labels"]) for t in targets)
-        num_boxes = torch.as_tensor(
-            [num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device
-        )
+        num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         if is_dist_available_and_initialized():
             torch.distributed.all_reduce(num_boxes)
         num_boxes = torch.clamp(num_boxes / get_world_size(), min=1).item()
@@ -375,7 +359,7 @@ class DomeCriterion(nn.Module):
         losses = {}
         for loss in self.losses:
             # TODO, indices and num_box are different from RT-DETRv2
-            use_uni_set = self.use_uni_set and (loss in ['boxes', 'local'])
+            use_uni_set = self.use_uni_set and (loss in ["boxes", "local"])
             indices_in = indices_go if use_uni_set else indices
             num_boxes_in = num_boxes_go if use_uni_set else num_boxes
             meta = self.get_loss_meta_info(loss, outputs, targets, indices_in)
@@ -384,90 +368,90 @@ class DomeCriterion(nn.Module):
             losses.update(l_dict)
 
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
-        if 'aux_outputs' in outputs:
-            for i, aux_outputs in enumerate(outputs['aux_outputs']):
-                if 'local' in self.losses:      # only work for local loss
-                    aux_outputs['up'], aux_outputs['reg_scale'] = outputs['up'], outputs['reg_scale']
+        if "aux_outputs" in outputs:
+            for i, aux_outputs in enumerate(outputs["aux_outputs"]):
+                if "local" in self.losses:  # only work for local loss
+                    aux_outputs["up"], aux_outputs["reg_scale"] = outputs["up"], outputs["reg_scale"]
                 for loss in self.losses:
                     # TODO, indices and num_box are different from RT-DETRv2
-                    use_uni_set = self.use_uni_set and (loss in ['boxes', 'local'])
+                    use_uni_set = self.use_uni_set and (loss in ["boxes", "local"])
                     indices_in = indices_go if use_uni_set else cached_indices[i]
                     num_boxes_in = num_boxes_go if use_uni_set else num_boxes
                     meta = self.get_loss_meta_info(loss, aux_outputs, targets, indices_in)
                     l_dict = self.get_loss(loss, aux_outputs, targets, indices_in, num_boxes_in, **meta)
 
                     l_dict = {k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict}
-                    l_dict = {k + f'_aux_{i}': v for k, v in l_dict.items()}
+                    l_dict = {k + f"_aux_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
         # In case of auxiliary traditional head output at first decoder layer. just for dome
-        if 'pre_outputs' in outputs:
-            aux_outputs = outputs['pre_outputs']
+        if "pre_outputs" in outputs:
+            aux_outputs = outputs["pre_outputs"]
             for loss in self.losses:
                 # TODO, indices and num_box are different from RT-DETRv2
-                use_uni_set = self.use_uni_set and (loss in ['boxes', 'local'])
+                use_uni_set = self.use_uni_set and (loss in ["boxes", "local"])
                 indices_in = indices_go if use_uni_set else cached_indices[-1]
                 num_boxes_in = num_boxes_go if use_uni_set else num_boxes
                 meta = self.get_loss_meta_info(loss, aux_outputs, targets, indices_in)
                 l_dict = self.get_loss(loss, aux_outputs, targets, indices_in, num_boxes_in, **meta)
 
                 l_dict = {k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict}
-                l_dict = {k + '_pre': v for k, v in l_dict.items()}
+                l_dict = {k + "_pre": v for k, v in l_dict.items()}
                 losses.update(l_dict)
 
         # In case of encoder auxiliary losses.
-        if 'enc_aux_outputs' in outputs:
-            assert 'enc_meta' in outputs, ''
-            class_agnostic = outputs['enc_meta']['class_agnostic']
+        if "enc_aux_outputs" in outputs:
+            assert "enc_meta" in outputs, ""
+            class_agnostic = outputs["enc_meta"]["class_agnostic"]
             if class_agnostic:
                 orig_num_classes = self.num_classes
                 self.num_classes = 1
                 enc_targets = copy.deepcopy(targets)
                 for t in enc_targets:
-                    t['labels'] = torch.zeros_like(t["labels"])
+                    t["labels"] = torch.zeros_like(t["labels"])
             else:
                 enc_targets = targets
 
-            for i, aux_outputs in enumerate(outputs['enc_aux_outputs']):
+            for i, aux_outputs in enumerate(outputs["enc_aux_outputs"]):
                 for loss in self.losses:
                     # TODO, indices and num_box are different from RT-DETRv2
-                    use_uni_set = self.use_uni_set and (loss == 'boxes')
+                    use_uni_set = self.use_uni_set and (loss == "boxes")
                     indices_in = indices_go if use_uni_set else cached_indices_enc[i]
                     num_boxes_in = num_boxes_go if use_uni_set else num_boxes
                     meta = self.get_loss_meta_info(loss, aux_outputs, enc_targets, indices_in)
                     l_dict = self.get_loss(loss, aux_outputs, enc_targets, indices_in, num_boxes_in, **meta)
                     l_dict = {k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict}
-                    l_dict = {k + f'_enc_{i}': v for k, v in l_dict.items()}
+                    l_dict = {k + f"_enc_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
             if class_agnostic:
                 self.num_classes = orig_num_classes
 
         # In case of cdn auxiliary losses.
-        if 'dn_outputs' in outputs:
-            assert 'dn_meta' in outputs, ''
-            indices_dn = self.get_cdn_matched_indices(outputs['dn_meta'], targets)
-            dn_num_boxes = num_boxes * outputs['dn_meta']['dn_num_group']
+        if "dn_outputs" in outputs:
+            assert "dn_meta" in outputs, ""
+            indices_dn = self.get_cdn_matched_indices(outputs["dn_meta"], targets)
+            dn_num_boxes = num_boxes * outputs["dn_meta"]["dn_num_group"]
 
-            for i, aux_outputs in enumerate(outputs['dn_outputs']):
-                if 'local' in self.losses:      # only work for local loss
-                    aux_outputs['is_dn'] = True
-                    aux_outputs['up'], aux_outputs['reg_scale'] = outputs['up'], outputs['reg_scale']
+            for i, aux_outputs in enumerate(outputs["dn_outputs"]):
+                if "local" in self.losses:  # only work for local loss
+                    aux_outputs["is_dn"] = True
+                    aux_outputs["up"], aux_outputs["reg_scale"] = outputs["up"], outputs["reg_scale"]
                 for loss in self.losses:
                     meta = self.get_loss_meta_info(loss, aux_outputs, targets, indices_dn)
                     l_dict = self.get_loss(loss, aux_outputs, targets, indices_dn, dn_num_boxes, **meta)
                     l_dict = {k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict}
-                    l_dict = {k + f'_dn_{i}': v for k, v in l_dict.items()}
+                    l_dict = {k + f"_dn_{i}": v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
             # In case of auxiliary traditional head output at first decoder layer, just for dome
-            if 'dn_pre_outputs' in outputs:
-                aux_outputs = outputs['dn_pre_outputs']
+            if "dn_pre_outputs" in outputs:
+                aux_outputs = outputs["dn_pre_outputs"]
                 for loss in self.losses:
                     meta = self.get_loss_meta_info(loss, aux_outputs, targets, indices_dn)
                     l_dict = self.get_loss(loss, aux_outputs, targets, indices_dn, dn_num_boxes, **meta)
                     l_dict = {k: l_dict[k] * self.weight_dict[k] for k in l_dict if k in self.weight_dict}
-                    l_dict = {k + '_dn_pre': v for k, v in l_dict.items()}
+                    l_dict = {k + "_dn_pre": v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
         # In case of defe Category losses.
@@ -479,7 +463,7 @@ class DomeCriterion(nn.Module):
             reg_targets = []
 
             for i in range(len(targets)):
-                tgt_num = targets[i]['labels'].shape[0]
+                tgt_num = targets[i]["labels"].shape[0]
                 if tgt_num < min_num_select:
                     tgt_num = min_num_select
                 elif tgt_num > max_num_select:
@@ -489,10 +473,10 @@ class DomeCriterion(nn.Module):
             reg_targets = torch.tensor(reg_targets, dtype=torch.int64).to(outputs["defe"]["reg_value"].device)
             reg_value = outputs["defe"]["reg_value"]
 
-            with torch.amp.autocast('cuda', dtype=torch.float16):
+            with torch.amp.autocast("cuda", dtype=torch.float16):
                 diff = reg_value - reg_targets
                 penalty_weights = torch.where(diff < 0, 2.0, 1.0).to(diff.device)
-                defe_reg_loss = (penalty_weights * (diff ** 2)).mean() 
+                defe_reg_loss = (penalty_weights * (diff**2)).mean()
             del reg_value, reg_targets
             torch.cuda.empty_cache()
             losses["defe_reg_loss"] = defe_reg_loss
@@ -500,11 +484,11 @@ class DomeCriterion(nn.Module):
             # Calculate defe Density Map Loss with emphasis on high GT regions
             density_map = outputs["defe"]["defe_feature"]
             gt_density_map = outputs["defe"]["gt_density_map"]
-            with torch.amp.autocast('cuda', dtype=torch.float16):
+            with torch.amp.autocast("cuda", dtype=torch.float16):
                 diff = density_map - gt_density_map
                 underestimation_mask = (density_map < gt_density_map).float()
                 penalty_weight = 1 + self.density_recall_penalty * gt_density_map * underestimation_mask
-                defe_density_loss = (penalty_weight * (diff ** 2)).mean() * self.defe_density_map_weight
+                defe_density_loss = (penalty_weight * (diff**2)).mean() * self.defe_density_map_weight
             del density_map, gt_density_map
             torch.cuda.empty_cache()
             losses["defe_density_loss"] = defe_density_loss
@@ -521,23 +505,19 @@ class DomeCriterion(nn.Module):
         target_boxes = torch.cat([t["boxes"][j] for t, (_, j) in zip(targets, indices)], dim=0)
 
         if self.boxes_weight_format == "iou":
-            iou, _ = box_iou(
-                box_cxcywh_to_xyxy(src_boxes.detach()), box_cxcywh_to_xyxy(target_boxes)
-            )
+            iou, _ = box_iou(box_cxcywh_to_xyxy(src_boxes.detach()), box_cxcywh_to_xyxy(target_boxes))
             iou = torch.diag(iou)
         elif self.boxes_weight_format == "giou":
             iou = torch.diag(
-                generalized_box_iou(
-                    box_cxcywh_to_xyxy(src_boxes.detach()), box_cxcywh_to_xyxy(target_boxes)
-                )
+                generalized_box_iou(box_cxcywh_to_xyxy(src_boxes.detach()), box_cxcywh_to_xyxy(target_boxes))
             )
         else:
             raise AttributeError()
 
         if loss in ("boxes",):
             meta = {"boxes_weight": iou}
-        elif loss in ('vfl', 'mal'):
-            meta = {'values': iou}
+        elif loss in ("vfl", "mal"):
+            meta = {"values": iou}
         else:
             meta = {}
 
@@ -577,9 +557,9 @@ class DomeCriterion(nn.Module):
         dis_left = label.long()
         dis_right = dis_left + 1
 
-        loss = F.cross_entropy(pred, dis_left, reduction="none") * weight_left.reshape(
-            -1
-        ) + F.cross_entropy(pred, dis_right, reduction="none") * weight_right.reshape(-1)
+        loss = F.cross_entropy(pred, dis_left, reduction="none") * weight_left.reshape(-1) + F.cross_entropy(
+            pred, dis_right, reduction="none"
+        ) * weight_right.reshape(-1)
 
         if weight is not None:
             weight = weight.float()

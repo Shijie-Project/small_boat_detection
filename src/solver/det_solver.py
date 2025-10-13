@@ -15,9 +15,7 @@ from .det_engine import evaluate, train_one_epoch
 
 
 class DetSolver(BaseSolver):
-    def fit(
-        self,
-    ):
+    def fit(self):
         self.train()
         args = self.cfg
 
@@ -26,10 +24,16 @@ class DetSolver(BaseSolver):
                 self.cfg.train_dataloader.collate_fn.base_size = int(self.cfg.train_dataloader.collate_fn.base_size)
             except ValueError:
                 try:
-                    self.cfg.train_dataloader.collate_fn.base_size = self.cfg.train_dataloader.collate_fn.base_size.strip('()[]')
-                    self.cfg.train_dataloader.collate_fn.base_size = tuple(int(x.strip()) for x in self.cfg.train_dataloader.collate_fn.base_size.split(','))
-                except:
-                    raise ValueError(f"Cannot convert base_size string '{self.cfg.train_dataloader.collate_fn.base_size}' to valid size format")
+                    self.cfg.train_dataloader.collate_fn.base_size = (
+                        self.cfg.train_dataloader.collate_fn.base_size.strip("()[]")
+                    )
+                    self.cfg.train_dataloader.collate_fn.base_size = tuple(
+                        int(x.strip()) for x in self.cfg.train_dataloader.collate_fn.base_size.split(",")
+                    )
+                except Exception:
+                    raise ValueError(
+                        f"Cannot convert base_size string '{self.cfg.train_dataloader.collate_fn.base_size}' to valid size format"
+                    )
 
         self.patience = 6
         self.not_improved_count = 0
@@ -76,7 +80,6 @@ class DetSolver(BaseSolver):
 
             print("Train starting...")
 
-
             train_stats = train_one_epoch(
                 self.model,
                 self.criterion,
@@ -91,7 +94,6 @@ class DetSolver(BaseSolver):
                 lr_warmup_scheduler=self.lr_warmup_scheduler,
                 writer=self.writer,
             )
-
 
             print("Training state finished.")
 
@@ -128,9 +130,7 @@ class DetSolver(BaseSolver):
                         self.writer.add_scalar(f"Test/{k}_{i}".format(k), v, epoch)
 
                 if k in best_stat:
-                    best_stat["epoch"] = (
-                        epoch if test_stats[k][0] > best_stat[k] else best_stat["epoch"]
-                    )
+                    best_stat["epoch"] = epoch if test_stats[k][0] > best_stat[k] else best_stat["epoch"]
                     best_stat[k] = max(best_stat[k], test_stats[k][0])
                 else:
                     best_stat["epoch"] = epoch
@@ -142,13 +142,9 @@ class DetSolver(BaseSolver):
                     top1 = best_stat[k]
                     if self.output_dir:
                         if epoch >= self.train_dataloader.collate_fn.stop_epoch:
-                            dist_utils.save_on_master(
-                                self.state_dict(), self.output_dir / "best_stg2.pth"
-                            )
+                            dist_utils.save_on_master(self.state_dict(), self.output_dir / "best_stg2.pth")
                         else:
-                            dist_utils.save_on_master(
-                                self.state_dict(), self.output_dir / "best_stg1.pth"
-                            )
+                            dist_utils.save_on_master(self.state_dict(), self.output_dir / "best_stg1.pth")
                 else:
                     self.not_improved_count += 1
 
@@ -160,14 +156,10 @@ class DetSolver(BaseSolver):
                     if epoch >= self.train_dataloader.collate_fn.stop_epoch:
                         if test_stats[k][0] > top1:
                             top1 = test_stats[k][0]
-                            dist_utils.save_on_master(
-                                self.state_dict(), self.output_dir / "best_stg2.pth"
-                            )
+                            dist_utils.save_on_master(self.state_dict(), self.output_dir / "best_stg2.pth")
                     else:
                         top1 = max(test_stats[k][0], top1)
-                        dist_utils.save_on_master(
-                            self.state_dict(), self.output_dir / "best_stg1.pth"
-                        )
+                        dist_utils.save_on_master(self.state_dict(), self.output_dir / "best_stg1.pth")
 
                 elif epoch >= self.train_dataloader.collate_fn.stop_epoch:
                     if self.not_improved_count >= self.patience:
@@ -182,7 +174,9 @@ class DetSolver(BaseSolver):
                             self.load_resume_state(str(self.output_dir / "best_stg1.pth"))
                         print(f"Refresh EMA at epoch {epoch} with decay {self.ema.decay}")
                     else:
-                        print(f"Tolerate undesirable result for patience: {self.not_improved_count} / {self.patience} ")
+                        print(
+                            f"Tolerate undesirable result for patience: {self.not_improved_count} / {self.patience} "
+                        )
 
             log_stats = {
                 **{f"train_{k}": v for k, v in train_stats.items()},
@@ -210,11 +204,9 @@ class DetSolver(BaseSolver):
 
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-        print("Training time {}".format(total_time_str))
+        print(f"Training time {total_time_str}")
 
-    def val(
-        self,
-    ):
+    def val(self):
         self.eval()
 
         module = self.ema.module if self.ema else self.model
@@ -228,8 +220,6 @@ class DetSolver(BaseSolver):
         )
 
         if self.output_dir:
-            dist_utils.save_on_master(
-                coco_evaluator.coco_eval["bbox"].eval, self.output_dir / "eval.pth"
-            )
+            dist_utils.save_on_master(coco_evaluator.coco_eval["bbox"].eval, self.output_dir / "eval.pth")
 
         return

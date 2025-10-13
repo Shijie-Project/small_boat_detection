@@ -18,5 +18,5 @@ from ._transforms import (
     SanitizeBoundingBoxes,
 )
 from .container import Compose
-from .mosaic import Mosaic
 from .mixup import MixUp
+from .mosaic import Mosaic

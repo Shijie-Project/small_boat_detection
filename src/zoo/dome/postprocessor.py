@@ -10,6 +10,7 @@ import torchvision
 
 from ...core import register
 
+
 __all__ = ["DomePostProcessor"]
 
 
@@ -43,7 +44,7 @@ class DomePostProcessor(nn.Module):
         # import pdb
         # pdb.set_trace()
 
-        self.num_top_queries = logits.shape[1] # cancel num_top_queries
+        self.num_top_queries = logits.shape[1]  # cancel num_top_queries
         # orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
         bbox_pred = torchvision.ops.box_convert(boxes, in_fmt="cxcywh", out_fmt="xyxy")
         bbox_pred *= orig_target_sizes.repeat(1, 2).unsqueeze(1)
@@ -55,9 +56,7 @@ class DomePostProcessor(nn.Module):
             # labels = index % self.num_classes
             labels = mod(index, self.num_classes)
             index = index // self.num_classes
-            boxes = bbox_pred.gather(
-                dim=1, index=index.unsqueeze(-1).repeat(1, 1, bbox_pred.shape[-1])
-            )
+            boxes = bbox_pred.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, bbox_pred.shape[-1]))
 
         else:
             scores = F.softmax(logits)[:, :, :-1]
@@ -65,9 +64,7 @@ class DomePostProcessor(nn.Module):
             if scores.shape[1] > self.num_top_queries:
                 scores, index = torch.topk(scores, self.num_top_queries, dim=-1)
                 labels = torch.gather(labels, dim=1, index=index)
-                boxes = torch.gather(
-                    boxes, dim=1, index=index.unsqueeze(-1).tile(1, 1, boxes.shape[-1])
-                )
+                boxes = torch.gather(boxes, dim=1, index=index.unsqueeze(-1).tile(1, 1, boxes.shape[-1]))
 
         # TODO for onnx export
         if self.deploy_mode:

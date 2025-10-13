@@ -7,6 +7,7 @@ import torch
 
 from ...core import register
 
+
 __all__ = [
     "YOLO",
 ]

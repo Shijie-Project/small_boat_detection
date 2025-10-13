@@ -15,6 +15,7 @@ import torch.nn.functional as F
 from ...core import register
 from .common import FrozenBatchNorm2d
 
+
 # Constants for initialization
 kaiming_normal_ = nn.init.kaiming_normal_
 zeros_ = nn.init.zeros_
@@ -22,11 +23,13 @@ ones_ = nn.init.ones_
 
 __all__ = ["HGNetv2"]
 
+
 def safe_get_rank():
     if torch.distributed.is_available() and torch.distributed.is_initialized():
         return torch.distributed.get_rank()
     else:
         return 0
+
 
 class LearnableAffineBlock(nn.Module):
     def __init__(self, scale_value=1.0, bias_value=0.0):
@@ -537,9 +540,7 @@ class HGNetv2(nn.Module):
             except (Exception, KeyboardInterrupt) as e:
                 if safe_get_rank() == 0:
                     print(f"{str(e)}")
-                    logging.error(
-                        RED + "CRITICAL WARNING: Failed to load pretrained HGNetV2 model" + RESET
-                    )
+                    logging.error(RED + "CRITICAL WARNING: Failed to load pretrained HGNetV2 model" + RESET)
                     logging.error(
                         GREEN
                         + "Please check your network connection. Or download the model manually from "

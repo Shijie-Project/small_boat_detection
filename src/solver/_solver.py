@@ -1,7 +1,6 @@
 import atexit
 from datetime import datetime
 from pathlib import Path
-from typing import Dict
 
 import torch
 import torch.nn as nn
@@ -26,7 +25,7 @@ def remove_module_prefix(state_dict):
     return new_state_dict
 
 
-class BaseSolver(object):
+class BaseSolver:
     def __init__(self, cfg: BaseConfig) -> None:
         self.cfg = cfg
         self.obj365_ids = [
@@ -149,7 +148,7 @@ class BaseSolver(object):
         if self.writer:
             atexit.register(self.writer.close)
             if dist_utils.is_main_process():
-                self.writer.add_text("config", "{:s}".format(cfg.__repr__()), 0)
+                self.writer.add_text("config", f"{cfg.__repr__():s}", 0)
 
     def cleanup(self):
         if self.writer:
@@ -164,9 +163,7 @@ class BaseSolver(object):
         self.train_dataloader = dist_utils.warp_loader(
             self.cfg.train_dataloader, shuffle=self.cfg.train_dataloader.shuffle
         )
-        self.val_dataloader = dist_utils.warp_loader(
-            self.cfg.val_dataloader, shuffle=self.cfg.val_dataloader.shuffle
-        )
+        self.val_dataloader = dist_utils.warp_loader(self.cfg.val_dataloader, shuffle=self.cfg.val_dataloader.shuffle)
 
         self.evaluator = self.cfg.evaluator
 
@@ -178,9 +175,7 @@ class BaseSolver(object):
     def eval(self):
         self._setup()
 
-        self.val_dataloader = dist_utils.warp_loader(
-            self.cfg.val_dataloader, shuffle=self.cfg.val_dataloader.shuffle
-        )
+        self.val_dataloader = dist_utils.warp_loader(self.cfg.val_dataloader, shuffle=self.cfg.val_dataloader.shuffle)
 
         self.evaluator = self.cfg.evaluator
 
@@ -257,9 +252,7 @@ class BaseSolver(object):
 
         # Adjust head parameters between datasets
         try:
-            adjusted_state_dict = self._adjust_head_parameters(
-                module.state_dict(), pretrain_state_dict
-            )
+            adjusted_state_dict = self._adjust_head_parameters(module.state_dict(), pretrain_state_dict)
             stat, infos = self._matched_state(module.state_dict(), adjusted_state_dict)
         except Exception:
             stat, infos = self._matched_state(module.state_dict(), pretrain_state_dict)
@@ -268,7 +261,7 @@ class BaseSolver(object):
         print(f"Load model.state_dict, {infos}")
 
     @staticmethod
-    def _matched_state(state: Dict[str, torch.Tensor], params: Dict[str, torch.Tensor]):
+    def _matched_state(state: dict[str, torch.Tensor], params: dict[str, torch.Tensor]):
         missed_list = []
         unmatched_list = []
         matched_state = {}

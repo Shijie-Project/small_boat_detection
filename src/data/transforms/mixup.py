@@ -3,13 +3,14 @@ MixUp data augmentation for object detection
 """
 
 import random
+
 import torch
 import torchvision
 import torchvision.transforms.v2 as T
 from PIL import Image
 
 from ...core import register
-from .._misc import convert_to_tv_tensor
+
 
 torchvision.disable_beta_transforms_warning()
 
@@ -39,7 +40,7 @@ class MixUp(T.Transform):
 
         # 生成混合权重
         lam = random.betavariate(self.alpha, self.alpha)
-        
+
         # 混合图像
         w, h = image.size
         mixed_image = Image.new(mode=image.mode, size=(w, h), color=0)
@@ -66,4 +67,4 @@ class MixUp(T.Transform):
         # 添加混合权重信息
         mixed_target["mixup_weights"] = torch.tensor([lam, 1 - lam])
 
-        return mixed_image, mixed_target, dataset 
+        return mixed_image, mixed_target, dataset

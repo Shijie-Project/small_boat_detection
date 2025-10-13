@@ -2,9 +2,9 @@
 Copyright (c) 2025 The Dome-DETR Authors. All Rights Reserved.
 """
 
+import json
 import os
 import sys
-import json
 
 import cv2  # Added for video processing
 import numpy as np
@@ -13,7 +13,8 @@ import torch.nn as nn
 import torchvision.transforms as T
 from PIL import Image, ImageDraw
 
-INPUT_SIZE=800
+
+INPUT_SIZE = 800
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 from src.core import YAMLConfig
@@ -44,43 +45,43 @@ def load_coco_annotation(image_path, annotation_file):
     """加载COCO格式的标注文件"""
     # 获取图片文件名
     image_name = os.path.basename(image_path)
-    
+
     # 读取标注文件
-    with open(annotation_file, 'r') as f:
+    with open(annotation_file) as f:
         coco_data = json.load(f)
-    
+
     # 找到对应图片的信息
     image_info = None
-    for img in coco_data['images']:
-        if img['file_name'] == image_name:
+    for img in coco_data["images"]:
+        if img["file_name"] == image_name:
             image_info = img
             break
-    
+
     if image_info is None:
         return None
-    
+
     # 收集该图片的所有标注
-    image_id = image_info['id']
+    image_id = image_info["id"]
     annotations = []
-    for ann in coco_data['annotations']:
-        if ann['image_id'] == image_id:
+    for ann in coco_data["annotations"]:
+        if ann["image_id"] == image_id:
             annotations.append(ann)
-    
+
     if not annotations:
         return None
-        
+
     target = {
-        'boxes': torch.tensor([ann['bbox'] for ann in annotations], dtype=torch.float32),
-        'labels': torch.tensor([ann['category_id'] for ann in annotations], dtype=torch.int64),
-        'image_id': torch.tensor([image_id]),
-        'area': torch.tensor([ann['area'] for ann in annotations]),
-        'iscrowd': torch.tensor([ann['iscrowd'] for ann in annotations])
+        "boxes": torch.tensor([ann["bbox"] for ann in annotations], dtype=torch.float32),
+        "labels": torch.tensor([ann["category_id"] for ann in annotations], dtype=torch.int64),
+        "image_id": torch.tensor([image_id]),
+        "area": torch.tensor([ann["area"] for ann in annotations]),
+        "iscrowd": torch.tensor([ann["iscrowd"] for ann in annotations]),
     }
 
     # convert center xywh to xyxy
-    target['boxes'][:, :2] = target['boxes'][:, :2] - target['boxes'][:, 2:] / 2
-    target['boxes'][:, 2:] += target['boxes'][:, :2]
-    
+    target["boxes"][:, :2] = target["boxes"][:, :2] - target["boxes"][:, 2:] / 2
+    target["boxes"][:, 2:] += target["boxes"][:, :2]
+
     return target
 
 

@@ -6,7 +6,7 @@ Copyright(c) 2024 The D-FINE Authors. All Rights Reserved.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision
+
 
 __all__ = ["DetDETRPostProcessor"]
 
@@ -53,9 +53,7 @@ class DetDETRPostProcessor(nn.Module):
             if scores.shape[1] > self.num_top_queries:
                 scores, index = torch.topk(scores, self.num_top_queries, dim=-1)
                 labels = torch.gather(labels, dim=1, index=index)
-                boxes = torch.gather(
-                    boxes, dim=1, index=index.unsqueeze(-1).tile(1, 1, boxes.shape[-1])
-                )
+                boxes = torch.gather(boxes, dim=1, index=index.unsqueeze(-1).tile(1, 1, boxes.shape[-1]))
 
         if kwargs is not None:
             boxes = box_revert(

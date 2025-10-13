@@ -3,8 +3,6 @@ Copied from D-FINE (https://github.com/Peterande/D-FINE)
 Copyright(c) 2024 The D-FINE Authors. All Rights Reserved.
 """
 
-from typing import Dict
-
 import numpy as np
 import torch
 import torch.nn as nn
@@ -45,12 +43,10 @@ class HungarianMatcher(nn.Module):
         self.alpha = alpha
         self.gamma = gamma
 
-        assert (
-            self.cost_class != 0 or self.cost_bbox != 0 or self.cost_giou != 0
-        ), "all costs cant be 0"
+        assert self.cost_class != 0 or self.cost_bbox != 0 or self.cost_giou != 0, "all costs cant be 0"
 
     @torch.no_grad()
-    def forward(self, outputs: Dict[str, torch.Tensor], targets, return_topk=False):
+    def forward(self, outputs: dict[str, torch.Tensor], targets, return_topk=False):
         """Performs the matching
 
         Params:
@@ -75,9 +71,7 @@ class HungarianMatcher(nn.Module):
         if self.use_focal_loss:
             out_prob = F.sigmoid(outputs["pred_logits"].flatten(0, 1))
         else:
-            out_prob = (
-                outputs["pred_logits"].flatten(0, 1).softmax(-1)
-            )  # [batch_size * num_queries, num_classes]
+            out_prob = outputs["pred_logits"].flatten(0, 1).softmax(-1)  # [batch_size * num_queries, num_classes]
 
         out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
 
@@ -91,12 +85,8 @@ class HungarianMatcher(nn.Module):
         if self.use_focal_loss:
             # print("out_prob:", out_prob.shape)
             out_prob = out_prob[:, tgt_ids]
-            neg_cost_class = (
-                (1 - self.alpha) * (out_prob**self.gamma) * (-(1 - out_prob + 1e-8).log())
-            )
-            pos_cost_class = (
-                self.alpha * ((1 - out_prob) ** self.gamma) * (-(out_prob + 1e-8).log())
-            )
+            neg_cost_class = (1 - self.alpha) * (out_prob**self.gamma) * (-(1 - out_prob + 1e-8).log())
+            pos_cost_class = self.alpha * ((1 - out_prob) ** self.gamma) * (-(out_prob + 1e-8).log())
             cost_class = pos_cost_class - neg_cost_class
         else:
             cost_class = -out_prob[:, tgt_ids]
@@ -115,17 +105,12 @@ class HungarianMatcher(nn.Module):
         C = torch.nan_to_num(C, nan=1.0)
         indices_pre = [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]
         indices = [
-            (torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64))
-            for i, j in indices_pre
+            (torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices_pre
         ]
 
         # Compute topk indices
         if return_topk:
-            return {
-                "indices_o2m": self.get_top_k_matches(
-                    C, sizes=sizes, k=return_topk, initial_indices=indices_pre
-                )
-            }
+            return {"indices_o2m": self.get_top_k_matches(C, sizes=sizes, k=return_topk, initial_indices=indices_pre)}
 
         return {"indices": indices}  # , 'indices_o2m': C.min(-1)[1]}
 
@@ -134,15 +119,10 @@ class HungarianMatcher(nn.Module):
         # C_original = C.clone()
         for i in range(k):
             indices_k = (
-                [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))]
-                if i > 0
-                else initial_indices
+                [linear_sum_assignment(c[i]) for i, c in enumerate(C.split(sizes, -1))] if i > 0 else initial_indices
             )
             indices_list.append(
-                [
-                    (torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64))
-                    for i, j in indices_k
-                ]
+                [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices_k]
             )
             for c, idx_k in zip(C.split(sizes, -1), indices_k):
                 idx_k = np.stack(idx_k)

@@ -101,12 +101,8 @@ class DetCriterion(torch.nn.Module):
         )
         target_classes[idx] = target_classes_o
 
-        target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1].to(
-            src_logits.dtype
-        )
-        loss = torchvision.ops.sigmoid_focal_loss(
-            src_logits, target, self.alpha, self.gamma, reduction="none"
-        )
+        target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1].to(src_logits.dtype)
+        loss = torchvision.ops.sigmoid_focal_loss(src_logits, target, self.alpha, self.gamma, reduction="none")
         loss = loss.sum() / num_boxes
         return {"loss_focal": loss}
 
@@ -118,9 +114,7 @@ class DetCriterion(torch.nn.Module):
         target_boxes = torch.cat([t["boxes"][j] for t, (_, j) in zip(targets, indices)], dim=0)
 
         src_boxes = torchvision.ops.box_convert(src_boxes, in_fmt=self.box_fmt, out_fmt="xyxy")
-        target_boxes = torchvision.ops.box_convert(
-            target_boxes, in_fmt=self.box_fmt, out_fmt="xyxy"
-        )
+        target_boxes = torchvision.ops.box_convert(target_boxes, in_fmt=self.box_fmt, out_fmt="xyxy")
         iou, _ = box_ops.elementwise_box_iou(src_boxes.detach(), target_boxes)
 
         src_logits: torch.Tensor = outputs["pred_logits"]
@@ -138,9 +132,7 @@ class DetCriterion(torch.nn.Module):
         src_score = F.sigmoid(src_logits.detach())
         weight = self.alpha * src_score.pow(self.gamma) * (1 - target) + target_score
 
-        loss = F.binary_cross_entropy_with_logits(
-            src_logits, target_score, weight=weight, reduction="none"
-        )
+        loss = F.binary_cross_entropy_with_logits(src_logits, target_score, weight=weight, reduction="none")
         loss = loss.sum() / num_boxes
         return {"loss_vfl": loss}
 
@@ -155,9 +147,7 @@ class DetCriterion(torch.nn.Module):
         losses["loss_bbox"] = loss_bbox.sum() / num_boxes
 
         src_boxes = torchvision.ops.box_convert(src_boxes, in_fmt=self.box_fmt, out_fmt="xyxy")
-        target_boxes = torchvision.ops.box_convert(
-            target_boxes, in_fmt=self.box_fmt, out_fmt="xyxy"
-        )
+        target_boxes = torchvision.ops.box_convert(target_boxes, in_fmt=self.box_fmt, out_fmt="xyxy")
         loss_giou = 1 - box_ops.elementwise_generalized_box_iou(src_boxes, target_boxes)
         losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses
@@ -170,9 +160,7 @@ class DetCriterion(torch.nn.Module):
 
         losses = {}
         src_boxes = torchvision.ops.box_convert(src_boxes, in_fmt=self.box_fmt, out_fmt="xyxy")
-        target_boxes = torchvision.ops.box_convert(
-            target_boxes, in_fmt=self.box_fmt, out_fmt="xyxy"
-        )
+        target_boxes = torchvision.ops.box_convert(target_boxes, in_fmt=self.box_fmt, out_fmt="xyxy")
         loss_giou = 1 - box_ops.elementwise_generalized_box_iou(src_boxes, target_boxes)
         losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses

@@ -1,7 +1,7 @@
-'''
+"""
 Dome-DETR: Dome-DETR: DETR with Density-Oriented Feature-Query Manipulation for Efficient Tiny Object Detection
 Copyright (c) 2025 The Dome-DETR Authors. All Rights Reserved.
-'''
+"""
 
 import contextlib
 import copy
@@ -15,13 +15,14 @@ from faster_coco_eval_aitod import COCO, COCOeval_faster
 from ...core import register
 from ...misc import dist_utils
 
+
 __all__ = [
     "AitodCocoEvaluator",
 ]
 
 
 @register()
-class AitodCocoEvaluator(object):
+class AitodCocoEvaluator:
     def __init__(self, coco_gt, iou_types):
         assert isinstance(iou_types, (list, tuple))
         coco_gt = copy.deepcopy(coco_gt)
@@ -85,7 +86,7 @@ class AitodCocoEvaluator(object):
 
     def summarize(self):
         for iou_type, coco_eval in self.coco_eval.items():
-            print("IoU metric: {}".format(iou_type))
+            print(f"IoU metric: {iou_type}")
             coco_eval.summarize()
 
     def prepare(self, predictions, iou_type):
@@ -96,7 +97,7 @@ class AitodCocoEvaluator(object):
         elif iou_type == "keypoints":
             return self.prepare_for_coco_keypoint(predictions)
         else:
-            raise ValueError("Unknown iou type {}".format(iou_type))
+            raise ValueError(f"Unknown iou type {iou_type}")
 
     def prepare_for_coco_detection(self, predictions):
         coco_results = []
@@ -138,8 +139,7 @@ class AitodCocoEvaluator(object):
             labels = prediction["labels"].tolist()
 
             rles = [
-                mask_util.encode(np.array(mask[0, :, :, np.newaxis], dtype=np.uint8, order="F"))[0]
-                for mask in masks
+                mask_util.encode(np.array(mask[0, :, :, np.newaxis], dtype=np.uint8, order="F"))[0] for mask in masks
             ]
             for rle in rles:
                 rle["counts"] = rle["counts"].decode("utf-8")

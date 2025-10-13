@@ -4,18 +4,14 @@ Copyright(c) 2024 The D-FINE Authors. All Rights Reserved.
 """
 
 import random
-from functools import partial
 
 import torch
 import torch.nn.functional as F
 import torch.utils.data as data
 import torchvision
-import torchvision.transforms.v2 as VT
-from torch.utils.data import default_collate
-from torchvision.transforms.v2 import InterpolationMode
-from torchvision.transforms.v2 import functional as VF
 
 from ..core import register
+
 
 torchvision.disable_beta_transforms_warning()
 
@@ -36,7 +32,7 @@ class DataLoader(data.DataLoader):
         format_string = self.__class__.__name__ + "("
         for n in ["dataset", "batch_size", "num_workers", "drop_last", "collate_fn"]:
             format_string += "\n"
-            format_string += "    {0}: {1}".format(n, getattr(self, n))
+            format_string += f"    {n}: {getattr(self, n)}"
         format_string += "\n)"
         return format_string
 
@@ -65,7 +61,7 @@ def batch_image_collate_fn(items):
     return torch.cat([x[0][None] for x in items], dim=0), [x[1] for x in items]
 
 
-class BaseCollateFunction(object):
+class BaseCollateFunction:
     def set_epoch(self, epoch):
         self._epoch = epoch
 
@@ -84,19 +80,19 @@ class BaseCollateFunction(object):
 #         h, w = base_size
 #         h_scales = []
 #         w_scales = []
-        
+
 #         # 为高度生成尺度
 #         h_repeat = (h - int(h * 0.75 / 32) * 32) // 32
 #         h_scales = [int(h * 0.75 / 32) * 32 + i * 32 for i in range(h_repeat)]
 #         h_scales += [h] * base_size_repeat
 #         h_scales += [int(h * 1.25 / 32) * 32 - i * 32 for i in range(h_repeat)]
-        
+
 #         # 为宽度生成尺度
 #         w_repeat = (w - int(w * 0.75 / 32) * 32) // 32
 #         w_scales = [int(w * 0.75 / 32) * 32 + i * 32 for i in range(w_repeat)]
 #         w_scales += [w] * base_size_repeat
 #         w_scales += [int(w * 1.25 / 32) * 32 - i * 32 for i in range(w_repeat)]
-        
+
 #         return list(zip(h_scales, w_scales))
 #     else:
 #         # 保持原有的方形图片处理逻辑
@@ -193,6 +189,7 @@ def generate_scales(base_size, base_size_repeat, window_size):
         scales = low_to_base + [base_size] * base_size_repeat + high_part
         return [(s, s) for s in scales]
 
+
 @register()
 class BatchImageCollateFunction(BaseCollateFunction):
     def __init__(
@@ -210,14 +207,14 @@ class BatchImageCollateFunction(BaseCollateFunction):
                 self.base_size = int(self.base_size)
             except ValueError:
                 try:
-                    self.base_size = self.base_size.strip('()[]')
-                    self.base_size = tuple(int(x.strip()) for x in self.base_size.split(','))
+                    self.base_size = self.base_size.strip("()[]")
+                    self.base_size = tuple(int(x.strip()) for x in self.base_size.split(","))
                 except:
                     raise ValueError(f"Cannot convert base_size string '{self.base_size}' to valid size format")
         self.window_size = mwas_window_size  # 初始化window_size
         self.scales = (
-            generate_scales(self.base_size, base_size_repeat, self.window_size) 
-            if base_size_repeat is not None 
+            generate_scales(self.base_size, base_size_repeat, self.window_size)
+            if base_size_repeat is not None
             else None
         )
         self.stop_epoch = stop_epoch if stop_epoch is not None else 100000000

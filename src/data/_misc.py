@@ -3,9 +3,12 @@ Copied from D-FINE (https://github.com/Peterande/D-FINE)
 Copyright(c) 2024 The D-FINE Authors. All Rights Reserved.
 """
 
+# flake8: noqa
+
 import importlib.metadata
 
 from torch import Tensor
+
 
 if "0.15.2" in importlib.metadata.version("torchvision"):
     import torchvision

@@ -47,19 +47,13 @@ class OvInfer:
             new_w = int(w * r)
             new_h = int(h * r)
             temp_image = cv2.resize(ori_image, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
-            resized_image = np.full(
-                (self.target_size[0], self.target_size[1], 3), 114, dtype=temp_image.dtype
-            )
+            resized_image = np.full((self.target_size[0], self.target_size[1], 3), 114, dtype=temp_image.dtype)
             resized_image[:new_h, :new_w, :] = temp_image
             self.resized_image = resized_image
         else:
-            self.resized_image = cv2.resize(
-                ori_image, self.target_size, interpolation=cv2.INTER_LINEAR
-            )
+            self.resized_image = cv2.resize(ori_image, self.target_size, interpolation=cv2.INTER_LINEAR)
         blob_image = cv2.dnn.blobFromImage(self.resized_image, 1.0 / 255.0)
-        orig_size = np.array([self.resized_image.shape[0], self.resized_image.shape[1]]).reshape(
-            1, 2
-        )
+        orig_size = np.array([self.resized_image.shape[0], self.resized_image.shape[1]]).reshape(1, 2)
         inputs = {
             "images": blob_image,
             "orig_target_sizes": orig_size,
@@ -80,9 +74,7 @@ class OvInfer:
                 cy = boxes[0, i, 1] * self.ratio
                 bx = boxes[0, i, 2] * self.ratio
                 by = boxes[0, i, 3] * self.ratio
-                cv2.rectangle(
-                    draw_image, (int(cx), int(cy), int(bx - cx), int(by - cy)), (255, 0, 0), 1
-                )
+                cv2.rectangle(draw_image, (int(cx), int(cy), int(bx - cx), int(by - cy)), (255, 0, 0), 1)
         cv2.imwrite(image_path, draw_image)
 
 

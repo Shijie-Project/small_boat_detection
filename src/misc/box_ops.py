@@ -3,8 +3,6 @@ Copied from D-FINE (https://github.com/Peterande/D-FINE)
 Copyright(c) 2024 The D-FINE Authors. All Rights Reserved.
 """
 
-from typing import List, Tuple
-
 import torch
 import torchvision
 from torch import Tensor
@@ -63,8 +61,8 @@ def check_point_inside_box(points: Tensor, boxes: Tensor, eps=1e-9) -> Tensor:
     Returns:
         Tensor (bool), [K, N]
     """
-    x, y = [p.unsqueeze(-1) for p in points.unbind(-1)]
-    x1, y1, x2, y2 = [x.unsqueeze(0) for x in boxes.unbind(-1)]
+    x, y = (p.unsqueeze(-1) for p in points.unbind(-1))
+    x1, y1, x2, y2 = (x.unsqueeze(0) for x in boxes.unbind(-1))
 
     l = x - x1
     t = y - y1

@@ -104,9 +104,7 @@ class CSPDarkNet(nn.Module):
 
         self.layers = nn.ModuleList([Conv(in_channels, channels[0], 6, 2, 2, act=act)])
         for i, (c, d) in enumerate(zip(channels, depths), 1):
-            layer = nn.Sequential(
-                *[Conv(c, channels[i], 3, 2, act=act), C3(channels[i], channels[i], n=d, act=act)]
-            )
+            layer = nn.Sequential(*[Conv(c, channels[i], 3, 2, act=act), C3(channels[i], channels[i], n=d, act=act)])
             self.layers.append(layer)
 
         self.layers.append(SPPF(channels[-1], channels[-1], k=5, act=act))
@@ -146,16 +144,10 @@ class CSPPAN(nn.Module):
 
         self.out_channels = in_channels
         self.fpn_stems = nn.ModuleList(
-            [
-                Conv(cin, cout, 1, 1, act=act)
-                for cin, cout in zip(in_channels[::-1], in_channels[::-1][1:])
-            ]
+            [Conv(cin, cout, 1, 1, act=act) for cin, cout in zip(in_channels[::-1], in_channels[::-1][1:])]
         )
         self.fpn_csps = nn.ModuleList(
-            [
-                C3(cin, cout, depth, False, act=act)
-                for cin, cout in zip(in_channels[::-1], in_channels[::-1][1:])
-            ]
+            [C3(cin, cout, depth, False, act=act) for cin, cout in zip(in_channels[::-1], in_channels[::-1][1:])]
         )
 
         self.pan_stems = nn.ModuleList([Conv(c, c, 3, 2, act=act) for c in in_channels[:-1]])

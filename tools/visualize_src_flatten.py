@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 
+
 def visualize_src_flatten(src_flatten, spatial_shapes, savename="feature", is_flatten=True):
     print("visualizing src_flatten")
     if is_flatten:
@@ -24,7 +25,7 @@ def visualize_src_flatten(src_flatten, spatial_shapes, savename="feature", is_fl
         aggregated_normalized = (aggregated - aggregated.min()) / (aggregated.max() - aggregated.min())
         plt.figure()
         plt.title(f"Level {lvl} - Channel Sum")
-        plt.imshow(aggregated_normalized.squeeze(0).cpu().detach().numpy(), cmap='plasma')
+        plt.imshow(aggregated_normalized.squeeze(0).cpu().detach().numpy(), cmap="plasma")
         plt.colorbar()
         plt.savefig(f"./visualize/{savename}_level_{lvl}_channel_sum.png")
         plt.close()

@@ -36,10 +36,8 @@ class TimeProfiler(contextlib.ContextDecorator):
         return time.time()
 
 
-class TRTInference(object):
-    def __init__(
-        self, engine_path, device="cuda:0", backend="torch", max_batch_size=32, verbose=False
-    ):
+class TRTInference:
+    def __init__(self, engine_path, device="cuda:0", backend="torch", max_batch_size=32, verbose=False):
         self.engine_path = engine_path
         self.device = device
         self.backend = backend
@@ -49,9 +47,7 @@ class TRTInference(object):
 
         self.engine = self.load_engine(engine_path)
         self.context = self.engine.create_execution_context()
-        self.bindings = self.get_bindings(
-            self.engine, self.context, self.max_batch_size, self.device
-        )
+        self.bindings = self.get_bindings(self.engine, self.context, self.max_batch_size, self.device)
         self.bindings_addr = OrderedDict((n, v.ptr) for n, v in self.bindings.items())
         self.input_names = self.get_input_names()
         self.output_names = self.get_output_names()
@@ -102,7 +98,7 @@ class TRTInference(object):
                 self.context.set_input_shape(n, blob[n].shape)
                 self.bindings[n] = self.bindings[n]._replace(shape=blob[n].shape)
 
-            assert self.bindings[n].data.dtype == blob[n].dtype, "{} dtype mismatch".format(n)
+            assert self.bindings[n].data.dtype == blob[n].dtype, f"{n} dtype mismatch"
 
         self.bindings_addr.update({n: blob[n].data_ptr() for n in self.input_names})
         self.context.execute_v2(list(self.bindings_addr.values()))

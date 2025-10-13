@@ -13,6 +13,7 @@ import torch.nn.functional as F
 from ...core import register
 from .common import get_activation
 
+
 __all__ = ["CSPResNet"]
 
 
@@ -27,9 +28,7 @@ donwload_url = {
 class ConvBNLayer(nn.Module):
     def __init__(self, ch_in, ch_out, filter_size=3, stride=1, groups=1, padding=0, act=None):
         super().__init__()
-        self.conv = nn.Conv2d(
-            ch_in, ch_out, filter_size, stride, padding, groups=groups, bias=False
-        )
+        self.conv = nn.Conv2d(ch_in, ch_out, filter_size, stride, padding, groups=groups, bias=False)
         self.bn = nn.BatchNorm2d(ch_out)
         self.act = get_activation(act)
 
@@ -82,9 +81,7 @@ class RepVggBlock(nn.Module):
         kernel1x1, bias1x1 = self._fuse_bn_tensor(self.conv2)
 
         if self.alpha:
-            return kernel3x3 + self.alpha * self._pad_1x1_to_3x3_tensor(
-                kernel1x1
-            ), bias3x3 + self.alpha * bias1x1
+            return kernel3x3 + self.alpha * self._pad_1x1_to_3x3_tensor(kernel1x1), bias3x3 + self.alpha * bias1x1
         else:
             return kernel3x3 + self._pad_1x1_to_3x3_tensor(kernel1x1), bias3x3 + bias1x1
 
@@ -131,7 +128,7 @@ class EffectiveSELayer(nn.Module):
     """
 
     def __init__(self, channels, act="hardsigmoid"):
-        super(EffectiveSELayer, self).__init__()
+        super().__init__()
         self.fc = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
         self.act = get_activation(act)
 
@@ -153,10 +150,7 @@ class CSPResStage(nn.Module):
         self.conv1 = ConvBNLayer(ch_mid, ch_mid // 2, 1, act=act)
         self.conv2 = ConvBNLayer(ch_mid, ch_mid // 2, 1, act=act)
         self.blocks = nn.Sequential(
-            *[
-                block_fn(ch_mid // 2, ch_mid // 2, act=act, shortcut=True, use_alpha=use_alpha)
-                for i in range(n)
-            ]
+            *[block_fn(ch_mid // 2, ch_mid // 2, act=act, shortcut=True, use_alpha=use_alpha) for i in range(n)]
         )
         if attn:
             self.attn = EffectiveSELayer(ch_mid, act="hardsigmoid")
@@ -227,15 +221,11 @@ class CSPResNet(nn.Module):
                         ),
                         (
                             "conv2",
-                            ConvBNLayer(
-                                channels[0] // 2, channels[0] // 2, 3, stride=1, padding=1, act=act
-                            ),
+                            ConvBNLayer(channels[0] // 2, channels[0] // 2, 3, stride=1, padding=1, act=act),
                         ),
                         (
                             "conv3",
-                            ConvBNLayer(
-                                channels[0] // 2, channels[0], 3, stride=1, padding=1, act=act
-                            ),
+                            ConvBNLayer(channels[0] // 2, channels[0], 3, stride=1, padding=1, act=act),
                         ),
                     ]
                 )
@@ -250,9 +240,7 @@ class CSPResNet(nn.Module):
                         ),
                         (
                             "conv2",
-                            ConvBNLayer(
-                                channels[0] // 2, channels[0], 3, stride=1, padding=1, act=act
-                            ),
+                            ConvBNLayer(channels[0] // 2, channels[0], 3, stride=1, padding=1, act=act),
                         ),
                     ]
                 )

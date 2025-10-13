@@ -16,9 +16,7 @@ def to_binary_data(path, size=(640, 640), output_name="input_tensor.bin"):
     data.tofile(output_name)
 
 
-def yolo_insert_nms(
-    path, score_threshold=0.01, iou_threshold=0.7, max_output_boxes=300, simplify=False
-):
+def yolo_insert_nms(path, score_threshold=0.01, iou_threshold=0.7, max_output_boxes=300, simplify=False):
     """
     http://www.xavierdupre.fr/app/onnxcustom/helpsphinx/api/onnxops/onnx__EfficientNMS_TRT.html
     https://huggingface.co/spaces/muttalib1326/Punjabi_Character_Detection/blob/3dd1e17054c64e5f6b2254278f96cfa2bf418cd4/utils/add_nms.py

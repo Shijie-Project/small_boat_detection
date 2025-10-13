@@ -14,6 +14,7 @@ from PIL import Image
 from ...core import register
 from .._misc import convert_to_tv_tensor
 
+
 torchvision.disable_beta_transforms_warning()
 
 
@@ -32,14 +33,12 @@ class Mosaic(T.Transform):
 
         # TODO add arg `output_size` for affine`
         # self.random_perspective = T.RandomPerspective(distortion_scale=0.5, p=1., )
-        self.random_affine = T.RandomAffine(
-            degrees=0, translate=(0.1, 0.1), scale=(0.5, 1.5), fill=114
-        )
+        self.random_affine = T.RandomAffine(degrees=0, translate=(0.1, 0.1), scale=(0.5, 1.5), fill=114)
 
     def forward(self, *inputs):
         inputs = inputs if len(inputs) > 1 else inputs[0]
         image, target, dataset = inputs
-        
+
         # 如果随机概率小于p，则不执行Mosaic
         if random.random() > self.p:
             return image, target, dataset
@@ -75,9 +74,7 @@ class Mosaic(T.Transform):
         if "boxes" in target:
             # target['boxes'] = target['boxes'].clamp(0, 640 * 2 - 1)
             w, h = image.size
-            target["boxes"] = convert_to_tv_tensor(
-                target["boxes"], "boxes", box_format="xyxy", spatial_size=[h, w]
-            )
+            target["boxes"] = convert_to_tv_tensor(target["boxes"], "boxes", box_format="xyxy", spatial_size=[h, w])
 
         if "masks" in target:
             target["masks"] = convert_to_tv_tensor(target["masks"], "masks")

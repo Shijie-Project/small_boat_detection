@@ -8,9 +8,8 @@ from typing import Callable, Optional
 
 import torch
 import torchvision
-import torchvision.transforms.functional as TVF
 from PIL import Image
-from sympy import im
+
 
 try:
     from defusedxml.ElementTree import parse as ET_parse
@@ -35,7 +34,7 @@ class VOCDetection(torchvision.datasets.VOCDetection, DetDataset):
         label_file: str = "label_list.txt",
         transforms: Optional[Callable] = None,
     ):
-        with open(os.path.join(root, ann_file), "r") as f:
+        with open(os.path.join(root, ann_file)) as f:
             lines = [x.strip() for x in f.readlines()]
             lines = [x.split(" ") for x in lines]
 
@@ -43,7 +42,7 @@ class VOCDetection(torchvision.datasets.VOCDetection, DetDataset):
         self.targets = [os.path.join(root, lin[1]) for lin in lines]
         assert len(self.images) == len(self.targets)
 
-        with open(os.path.join(root + label_file), "r") as f:
+        with open(os.path.join(root + label_file)) as f:
             labels = f.readlines()
             labels = [lab.strip() for lab in labels]
 
@@ -75,9 +74,7 @@ class VOCDetection(torchvision.datasets.VOCDetection, DetDataset):
 
         w, h = image.size
         boxes = torch.tensor(output["boxes"]) if len(output["boxes"]) > 0 else torch.zeros(0, 4)
-        output["boxes"] = convert_to_tv_tensor(
-            boxes, "boxes", box_format="xyxy", spatial_size=[h, w]
-        )
+        output["boxes"] = convert_to_tv_tensor(boxes, "boxes", box_format="xyxy", spatial_size=[h, w])
         output["labels"] = torch.tensor([self.labels_map[lab] for lab in output["labels"]])
         output["area"] = torch.tensor(output["area"])
         output["iscrowd"] = torch.tensor(output["iscrowd"])

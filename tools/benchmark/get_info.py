@@ -5,6 +5,7 @@ Copyright (c) 2025 The Dome-DETR Authors. All Rights Reserved.
 import os
 import sys
 
+
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../.."))
 
 import argparse
@@ -47,14 +48,12 @@ def main(
         model=model, input_shape=(1, 3, 640, 640), output_as_string=True, output_precision=4
     )
     params = sum(p.numel() for p in model.parameters())
-    print("Model FLOPs:%s   MACs:%s   Params:%s \n" % (flops, macs, params))
+    print(f"Model FLOPs:{flops}   MACs:{macs}   Params:{params} \n")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--config", "-c", default="configs/dome/dfine_hgnetv2_l_coco.yml", type=str
-    )
+    parser.add_argument("--config", "-c", default="configs/dome/dfine_hgnetv2_l_coco.yml", type=str)
     args = parser.parse_args()
 
     main(args)

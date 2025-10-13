@@ -1,4 +1,5 @@
 import re
+
 import matplotlib.pyplot as plt
 
 
@@ -7,10 +8,12 @@ def parse_log(log_path):
     current_epoch = None
 
     # 用于匹配关键信息的正则表达式
-    epoch_pattern = re.compile(r'Epoch: \[(\d+)\] Total time:')
-    ap_pattern = re.compile(r' Average Precision  \(AP\) \@\[ IoU\=0.50:0.95 \| area\=   all \| maxDets\=1500 \] \= (.*)')
+    epoch_pattern = re.compile(r"Epoch: \[(\d+)\] Total time:")
+    ap_pattern = re.compile(
+        r" Average Precision  \(AP\) \@\[ IoU\=0.50:0.95 \| area\=   all \| maxDets\=1500 \] \= (.*)"
+    )
 
-    with open(log_path, 'r') as f:
+    with open(log_path) as f:
         for line in f:
             # 匹配epoch结束行（包含Total time）
             epoch_match = epoch_pattern.search(line)
@@ -37,15 +40,15 @@ def plot_ap(ap_dict, save_path, max_epoch=159):
 
     # 绘制图表
     plt.figure(figsize=(12, 6))
-    plt.plot(epochs, aps, 'b-o', markersize=4)
+    plt.plot(epochs, aps, "b-o", markersize=4)
 
     # 绘制最高点的虚线
-    plt.axvline(x=max_ap_epoch, color='r', linestyle='--', label=f'Max AP at Epoch {max_ap_epoch}')
-    plt.axhline(y=max_ap, color='g', linestyle='--', label=f'Max AP {max_ap:.3f}')
+    plt.axvline(x=max_ap_epoch, color="r", linestyle="--", label=f"Max AP at Epoch {max_ap_epoch}")
+    plt.axhline(y=max_ap, color="g", linestyle="--", label=f"Max AP {max_ap:.3f}")
 
-    plt.title('Average Precision (AP) @[IoU=0.50:0.95]')
-    plt.xlabel('Epoch')
-    plt.ylabel('AP')
+    plt.title("Average Precision (AP) @[IoU=0.50:0.95]")
+    plt.xlabel("Epoch")
+    plt.ylabel("AP")
     plt.grid(True)
     plt.xlim(0, max_epoch)
     plt.ylim(0, 0.4)  # 根据实际情况调整y轴范围

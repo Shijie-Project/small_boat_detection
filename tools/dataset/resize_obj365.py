@@ -47,13 +47,13 @@ def resize_image_and_update_annotations(image_path, annotations, max_size=640):
 
 def resize_images_and_update_annotations(base_dir, subset, max_size=640, num_workers=4):
     print(f"Starting to resize images and update annotations for subset: {subset}")
-    json_file = os.path.join(base_dir, subset, "new_zhiyuan_objv2_{}.json".format(subset))
+    json_file = os.path.join(base_dir, subset, f"new_zhiyuan_objv2_{subset}.json")
     if not os.path.isfile(json_file):
         print(f"Error: JSON file not found at {json_file}")
         return
 
     print(f"Loading JSON file: {json_file}")
-    with open(json_file, "r") as f:
+    with open(json_file) as f:
         data = json.load(f)
     print("JSON file loaded.")
 
@@ -65,9 +65,7 @@ def resize_images_and_update_annotations(base_dir, subset, max_size=640, num_wor
 
     def process_image(image_info):
         image_path = os.path.join(base_dir, subset, image_info["file_name"])
-        results = resize_image_and_update_annotations(
-            image_path, image_annotations[image_info["id"]], max_size
-        )
+        results = resize_image_and_update_annotations(image_path, image_annotations[image_info["id"]], max_size)
         if results is None:
             updated_annotations, new_w, new_h, resized = None, None, None, None
         else:

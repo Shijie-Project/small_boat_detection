@@ -8,10 +8,8 @@ from torch.optim.lr_scheduler import LRScheduler
 from ..core import register
 
 
-class Warmup(object):
-    def __init__(
-        self, lr_scheduler: LRScheduler, warmup_duration: int, last_step: int = -1
-    ) -> None:
+class Warmup:
+    def __init__(self, lr_scheduler: LRScheduler, warmup_duration: int, last_step: int = -1) -> None:
         self.lr_scheduler = lr_scheduler
         self.warmup_end_values = [pg["lr"] for pg in lr_scheduler.optimizer.param_groups]
         self.last_step = last_step
@@ -47,9 +45,7 @@ class Warmup(object):
 
 @register()
 class LinearWarmup(Warmup):
-    def __init__(
-        self, lr_scheduler: LRScheduler, warmup_duration: int, last_step: int = -1
-    ) -> None:
+    def __init__(self, lr_scheduler: LRScheduler, warmup_duration: int, last_step: int = -1) -> None:
         super().__init__(lr_scheduler, warmup_duration, last_step)
 
     def get_warmup_factor(self, step):

@@ -9,7 +9,6 @@ import sys
 import time
 
 import fiftyone as fo
-import fiftyone.core.fields as fof
 import fiftyone.core.labels as fol
 import fiftyone.core.models as fom
 import fiftyone.zoo as foz
@@ -20,6 +19,7 @@ from fiftyone import ViewField as F
 from PIL import Image
 
 from src.core import YAMLConfig
+
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "../.."))
 
@@ -240,9 +240,7 @@ def filter_by_predictions5_confidence(predictions_view, confidence_threshold=0.3
                 detection["confidence"] >= confidence_threshold
                 and sample["predictions5"].detections[i]["confidence"] <= confidence_threshold
             ):
-                sample["predictions0"].detections[i]["confidence"] = sample[
-                    "predictions5"
-                ].detections[i]["confidence"]
+                sample["predictions0"].detections[i]["confidence"] = sample["predictions5"].detections[i]["confidence"]
                 has_modified = True
         if has_modified:
             sample.save()
@@ -285,9 +283,7 @@ def assign_iou_diff(predictions_view):
         # iou_diffs = [abs(iou_5 - iou_0) if iou_0 is not None and iou_5 is not None else -1 for iou_0, iou_5 in zip(ious_0, ious_5)]
         iou_inter = [fast_iou(b0, b5) for b0, b5 in zip(bbox_0, bbox_5)]
         iou_diffs = [
-            abs(iou_5 - iou_0)
-            if iou_0 is not None and iou_5 is not None and iou_inter > 0.5
-            else -1
+            abs(iou_5 - iou_0) if iou_0 is not None and iou_5 is not None and iou_inter > 0.5 else -1
             for iou_0, iou_5, iou_inter in zip(ious_0, ious_5, iou_inter)
         ]
 
@@ -352,16 +348,16 @@ def main(args):
             # Apply models and save predictions in different label fields
             for i in [L]:
                 model.model.decoder.decoder.eval_idx = i
-                label_field = "predictions{:d}".format(i)
+                label_field = f"predictions{i:d}"
                 predictions_view.apply_model(model, label_field=label_field)
 
             # filter_by_predictions5_confidence(predictions_view, confidence_threshold=0.3)
             for i in [L]:
-                label_field = "predictions{:d}".format(i)
+                label_field = f"predictions{i:d}"
                 predictions_view = predictions_view.filter_labels(
                     label_field, F("confidence") > 0.5, only_matches=False
                 )
-                eval_key = "eval{:d}".format(i)
+                eval_key = f"eval{i:d}"
                 _ = predictions_view.evaluate_detections(
                     label_field,
                     gt_field="ground_truth",
@@ -375,9 +371,7 @@ def main(args):
             # filtered_view = filtered_view.filter_labels("predictions5", F("iou_diff") > 0.05, only_matches=True)
             # restore_confidence(filtered_view)
 
-            predictions_view.export(
-                export_dir="saved_predictions_view", dataset_type=fo.types.FiftyOneDataset
-            )
+            predictions_view.export(export_dir="saved_predictions_view", dataset_type=fo.types.FiftyOneDataset)
             # filtered_view.export(
             #     export_dir="saved_filtered_view",
             #     dataset_type=fo.types.FiftyOneDataset

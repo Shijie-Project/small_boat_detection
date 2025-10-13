@@ -12,6 +12,7 @@ import torch.nn.functional as F
 from ...core import register
 from .common import FrozenBatchNorm2d, get_activation
 
+
 __all__ = ["PResNet"]
 
 
@@ -192,12 +193,7 @@ class PResNet(nn.Module):
             conv_def = [[3, ch_in, 7, 2, "conv1_1"]]
 
         self.conv1 = nn.Sequential(
-            OrderedDict(
-                [
-                    (name, ConvNormLayer(cin, cout, k, s, act=act))
-                    for cin, cout, k, s, name in conv_def
-                ]
-            )
+            OrderedDict([(name, ConvNormLayer(cin, cout, k, s, act=act)) for cin, cout, k, s, name in conv_def])
         )
 
         ch_out_list = [64, 128, 256, 512]
@@ -210,9 +206,7 @@ class PResNet(nn.Module):
         for i in range(num_stages):
             stage_num = i + 2
             self.res_layers.append(
-                Blocks(
-                    block, ch_in, ch_out_list[i], block_nums[i], stage_num, act=act, variant=variant
-                )
+                Blocks(block, ch_in, ch_out_list[i], block_nums[i], stage_num, act=act, variant=variant)
             )
             ch_in = _out_channels[i]
 
@@ -230,9 +224,7 @@ class PResNet(nn.Module):
 
         if pretrained:
             if isinstance(pretrained, bool) or "http" in pretrained:
-                state = torch.hub.load_state_dict_from_url(
-                    donwload_url[depth], map_location="cpu", model_dir="weight"
-                )
+                state = torch.hub.load_state_dict_from_url(donwload_url[depth], map_location="cpu", model_dir="weight")
             else:
                 state = torch.load(pretrained, map_location="cpu")
             self.load_state_dict(state)

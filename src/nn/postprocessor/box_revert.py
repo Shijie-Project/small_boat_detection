@@ -5,7 +5,6 @@ Copyright(c) 2024 The D-FINE Authors. All Rights Reserved.
 
 from enum import Enum
 
-import torch
 import torchvision
 from torch import Tensor
 

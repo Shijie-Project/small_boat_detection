@@ -4,7 +4,6 @@ https://towardsdatascience.com/getting-started-with-pytorch-image-models-timm-a-
 """
 
 import torch
-from torchvision.models.feature_extraction import create_feature_extractor, get_graph_node_names
 
 from ...core import register
 from .utils import IntermediateLayerGetter
@@ -12,9 +11,7 @@ from .utils import IntermediateLayerGetter
 
 @register()
 class TimmModel(torch.nn.Module):
-    def __init__(
-        self, name, return_layers, pretrained=False, exportable=True, features_only=True, **kwargs
-    ) -> None:
+    def __init__(self, name, return_layers, pretrained=False, exportable=True, features_only=True, **kwargs) -> None:
         super().__init__()
 
         import timm
@@ -31,9 +28,9 @@ class TimmModel(torch.nn.Module):
         # features = {'': ''}
         # model = create_feature_extractor(model, return_nodes=features)
 
-        assert set(return_layers).issubset(
-            model.feature_info.module_name()
-        ), f"return_layers should be a subset of {model.feature_info.module_name()}"
+        assert set(return_layers).issubset(model.feature_info.module_name()), (
+            f"return_layers should be a subset of {model.feature_info.module_name()}"
+        )
 
         # self.model = model
         self.model = IntermediateLayerGetter(model, return_layers)

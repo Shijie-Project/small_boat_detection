@@ -26,17 +26,13 @@ def parse_args():
         help="Directory for images to perform inference on.",
     )
     parser.add_argument("--engine_dir", type=str, help="Directory containing model engine files.")
-    parser.add_argument(
-        "--busy", action="store_true", help="Flag to indicate that other processes may be running."
-    )
+    parser.add_argument("--busy", action="store_true", help="Flag to indicate that other processes may be running.")
     args = parser.parse_args()
     return args
 
 
-class TRTInference(object):
-    def __init__(
-        self, engine_path, device="cuda", backend="torch", max_batch_size=32, verbose=False
-    ):
+class TRTInference:
+    def __init__(self, engine_path, device="cuda", backend="torch", max_batch_size=32, verbose=False):
         self.engine_path = engine_path
         self.device = device
         self.backend = backend
@@ -45,9 +41,7 @@ class TRTInference(object):
         self.logger = trt.Logger(trt.Logger.VERBOSE) if verbose else trt.Logger(trt.Logger.INFO)
         self.engine = self.load_engine(engine_path)
         self.context = self.engine.create_execution_context()
-        self.bindings = self.get_bindings(
-            self.engine, self.context, self.max_batch_size, self.device
-        )
+        self.bindings = self.get_bindings(self.engine, self.context, self.max_batch_size, self.device)
         self.bindings_addr = OrderedDict((n, v.ptr) for n, v in self.bindings.items())
         self.input_names = self.get_input_names()
         self.output_names = self.get_output_names()

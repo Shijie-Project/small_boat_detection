@@ -44,11 +44,7 @@ def get_contrastive_denoising_training_group(
         # 构建仅包含匹配查询的注意力掩码
         tgt_size = 0 + num_queries
         attn_mask = torch.zeros([tgt_size, tgt_size], dtype=torch.bool, device=device)
-        dn_meta = {
-            "dn_positive_idx": None, 
-            "dn_num_group": 0, 
-            "dn_num_split": [0, num_queries]
-        }
+        dn_meta = {"dn_positive_idx": None, "dn_num_group": 0, "dn_num_split": [0, num_queries]}
         return input_query_logits, input_query_bbox_unact, attn_mask, dn_meta
 
     num_group = num_denoising // max_gt_num
@@ -112,36 +108,34 @@ def get_contrastive_denoising_training_group(
 
     base_attn_mask[num_denoising:, :num_denoising] = True  # 匹配查询看不到去噪部分
 
-
-
     # reconstruct cannot see each other
     for i in range(num_group):
-            group_start = max_gt_num * 2 * i
-            group_end = max_gt_num * 2 * (i + 1)
-            
-            # 当前组看不到后续组
-            if i < num_group - 1:
-                base_attn_mask[group_start:group_end, group_end:num_denoising] = True
-            
-            # 当前组看不到前序组
-            if i > 0:
-                base_attn_mask[group_start:group_end, :group_start] = True
+        group_start = max_gt_num * 2 * i
+        group_end = max_gt_num * 2 * (i + 1)
+
+        # 当前组看不到后续组
+        if i < num_group - 1:
+            base_attn_mask[group_start:group_end, group_end:num_denoising] = True
+
+        # 当前组看不到前序组
+        if i > 0:
+            base_attn_mask[group_start:group_end, :group_start] = True
 
     # 扩展为三维并添加padding屏蔽
     attn_mask = base_attn_mask.unsqueeze(0)  # [1, tgt_size, tgt_size]
     attn_mask = attn_mask.repeat(num_heads * bs, 1, 1)  # [num_heads*bs, tgt_size, tgt_size]
-    
+
     # 添加padding屏蔽（考虑多头）
     if batch_queries_num is not None:
         for b in range(bs):
             valid_queries = batch_queries_num[b]
             padding_start = num_denoising + valid_queries
-            
+
             if padding_start < tgt_size:
                 # 计算该batch在所有头中的位置范围
                 head_start = b * num_heads
                 head_end = (b + 1) * num_heads
-                
+
                 # 对每个头应用相同的padding屏蔽
                 attn_mask[head_start:head_end, padding_start:, :] = True
                 attn_mask[head_start:head_end, :, padding_start:] = True

@@ -16,6 +16,7 @@ from ...core import register
 from .._misc import convert_to_tv_tensor
 from ._dataset import DetDataset
 
+
 torchvision.disable_beta_transforms_warning()
 faster_coco_eval.init_as_pycocotools()
 Image.MAX_IMAGE_PIXELS = None
@@ -25,15 +26,11 @@ __all__ = ["CocoDetection"]
 
 @register()
 class CocoDetection(torchvision.datasets.CocoDetection, DetDataset):
-    __inject__ = [
-        "transforms",
-    ]
+    __inject__ = ["transforms"]
     __share__ = ["remap_mscoco_category"]
 
-    def __init__(
-        self, img_folder, ann_file, transforms, return_masks=False, remap_mscoco_category=False
-    ):
-        super(CocoDetection, self).__init__(img_folder, ann_file)
+    def __init__(self, img_folder, ann_file, transforms, return_masks=False, remap_mscoco_category=False):
+        super().__init__(img_folder, ann_file)
         self._transforms = transforms
         self.prepare = ConvertCocoPolysToMask(return_masks)
         self.img_folder = img_folder
@@ -48,7 +45,7 @@ class CocoDetection(torchvision.datasets.CocoDetection, DetDataset):
         return img, target
 
     def load_item(self, idx):
-        image, target = super(CocoDetection, self).__getitem__(idx)
+        image, target = super().__getitem__(idx)
         image_id = self.ids[idx]
         target = {"image_id": image_id, "annotations": target}
 
@@ -60,9 +57,7 @@ class CocoDetection(torchvision.datasets.CocoDetection, DetDataset):
         target["idx"] = torch.tensor([idx])
 
         if "boxes" in target:
-            target["boxes"] = convert_to_tv_tensor(
-                target["boxes"], key="boxes", spatial_size=image.size[::-1]
-            )
+            target["boxes"] = convert_to_tv_tensor(target["boxes"], key="boxes", spatial_size=image.size[::-1])
 
         if "masks" in target:
             target["masks"] = convert_to_tv_tensor(target["masks"], key="masks")
@@ -79,27 +74,19 @@ class CocoDetection(torchvision.datasets.CocoDetection, DetDataset):
         return s
 
     @property
-    def categories(
-        self,
-    ):
+    def categories(self):
         return self.coco.dataset["categories"]
 
     @property
-    def category2name(
-        self,
-    ):
+    def category2name(self):
         return {cat["id"]: cat["name"] for cat in self.categories}
 
     @property
-    def category2label(
-        self,
-    ):
+    def category2label(self):
         return {cat["id"]: i for i, cat in enumerate(self.categories)}
 
     @property
-    def label2category(
-        self,
-    ):
+    def label2category(self):
         return {i: cat["id"] for i, cat in enumerate(self.categories)}
 
 
@@ -120,7 +107,7 @@ def convert_coco_poly_to_mask(segmentations, height, width):
     return masks
 
 
-class ConvertCocoPolysToMask(object):
+class ConvertCocoPolysToMask:
     def __init__(self, return_masks=False):
         self.return_masks = return_masks
 

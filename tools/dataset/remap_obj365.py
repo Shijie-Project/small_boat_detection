@@ -25,12 +25,10 @@ def create_split_annotations(original_annotations, split_image_ids, new_prefix, 
 
     new_annotations = {
         "images": new_images,
-        "annotations": [
-            ann for ann in original_annotations["annotations"] if ann["image_id"] in split_image_ids
-        ],
+        "annotations": [ann for ann in original_annotations["annotations"] if ann["image_id"] in split_image_ids],
         "categories": original_annotations["categories"],
     }
-    print(f'Number of annotations selected: {len(new_annotations["annotations"])}')
+    print(f"Number of annotations selected: {len(new_annotations['annotations'])}")
     with open(output_file, "w") as f:
         json.dump(new_annotations, f)
     print(f"Annotations saved to {output_file}")
@@ -70,9 +68,7 @@ def main():
     original_val_ann_file = os.path.join(base_dir, "val", "zhiyuan_objv2_val.json")
 
     new_val_ann_file = os.path.join(base_dir, "val", f"{output_suffix}_zhiyuan_objv2_val.json")
-    new_train_ann_file = os.path.join(
-        base_dir, "train", f"{output_suffix}_zhiyuan_objv2_train.json"
-    )
+    new_train_ann_file = os.path.join(base_dir, "train", f"{output_suffix}_zhiyuan_objv2_train.json")
 
     # Check if original annotation files exist
     if not os.path.isfile(original_train_ann_file):
@@ -84,12 +80,12 @@ def main():
 
     # Load the original training and validation annotations
     print("Loading original training annotations...")
-    with open(original_train_ann_file, "r") as f:
+    with open(original_train_ann_file) as f:
         train_annotations = json.load(f)
     print("Training annotations loaded.")
 
     print("Loading original validation annotations...")
-    with open(original_val_ann_file, "r") as f:
+    with open(original_val_ann_file) as f:
         val_annotations = json.load(f)
     print("Validation annotations loaded.")
 
@@ -99,9 +95,7 @@ def main():
     print(f"Total validation images: {len(val_image_ids)}")
 
     # Split image IDs for the new training and validation sets
-    print(
-        f"Splitting validation images into new validation set of size {new_val_size} and training set..."
-    )
+    print(f"Splitting validation images into new validation set of size {new_val_size} and training set...")
     new_val_image_ids = val_image_ids[:new_val_size]
     new_train_image_ids = val_image_ids[new_val_size:]
     print(f"New validation set size: {len(new_val_image_ids)}")
@@ -114,14 +108,10 @@ def main():
 
     # Combine the remaining validation images and annotations with the original training data
     print("Preparing new training images and annotations...")
-    new_train_images = [
-        img for img in val_annotations["images"] if img["id"] in new_train_image_ids
-    ]
+    new_train_images = [img for img in val_annotations["images"] if img["id"] in new_train_image_ids]
     print(f"Number of images from validation to add to training: {len(new_train_images)}")
     new_train_images = update_image_paths(new_train_images, "images_from_val")
-    new_train_annotations = [
-        ann for ann in val_annotations["annotations"] if ann["image_id"] in new_train_image_ids
-    ]
+    new_train_annotations = [ann for ann in val_annotations["annotations"] if ann["image_id"] in new_train_image_ids]
     print(f"Number of annotations from validation to add to training: {len(new_train_annotations)}")
 
     # Add the original training images and annotations

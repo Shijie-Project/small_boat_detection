@@ -4,27 +4,18 @@ Copyright(c) 2024 The D-FINE Authors. All Rights Reserved.
 """
 
 import copy
-import functools
-import math
-from collections import OrderedDict
-from typing import List, Optional
 
 import torch
-from torch import nn, Tensor
-import torch.nn.functional as F
-import torch.nn.init as init
-from .ops.modules import MSDeformAttn
+from torch import Tensor, nn
 
+from .ops.modules import MSDeformAttn
 from .utils import (
     get_activation,
 )
 
-class DeformableTransformerEncoder(nn.Module):
 
-    def __init__(self, 
-        encoder_layer, num_layers, norm=None, d_model=256, 
-        enc_layer_share=False
-    ):
+class DeformableTransformerEncoder(nn.Module):
+    def __init__(self, encoder_layer, num_layers, norm=None, d_model=256, enc_layer_share=False):
         super().__init__()
         # prepare layers
         if num_layers > 0:
@@ -41,9 +32,10 @@ class DeformableTransformerEncoder(nn.Module):
     def get_reference_points(spatial_shapes, valid_ratios, device):
         reference_points_list = []
         for lvl, (H_, W_) in enumerate(spatial_shapes):
-
-            ref_y, ref_x = torch.meshgrid(torch.linspace(0.5, H_ - 0.5, H_, dtype=torch.float32, device=device),
-                                          torch.linspace(0.5, W_ - 0.5, W_, dtype=torch.float32, device=device))
+            ref_y, ref_x = torch.meshgrid(
+                torch.linspace(0.5, H_ - 0.5, H_, dtype=torch.float32, device=device),
+                torch.linspace(0.5, W_ - 0.5, W_, dtype=torch.float32, device=device),
+            )
             ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * H_)
             ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * W_)
             ref = torch.stack((ref_x, ref_y), -1)
@@ -52,14 +44,15 @@ class DeformableTransformerEncoder(nn.Module):
         reference_points = reference_points[:, :, None] * valid_ratios[:, None]
         return reference_points
 
-    def forward(self, 
-            src: Tensor, 
-            pos: Tensor, 
-            spatial_shapes: Tensor, 
-            level_start_index: Tensor, 
-            valid_ratios: Tensor, 
-            key_padding_mask: Tensor
-            ):
+    def forward(
+        self,
+        src: Tensor,
+        pos: Tensor,
+        spatial_shapes: Tensor,
+        level_start_index: Tensor,
+        valid_ratios: Tensor,
+        key_padding_mask: Tensor,
+    ):
         """
         Input:
             - src: [bs, sum(hi*wi), 256]
@@ -71,7 +64,7 @@ class DeformableTransformerEncoder(nn.Module):
 
         Intermedia:
             - reference_points: [bs, sum(hi*wi), num_level, 2]
-        Outpus: 
+        Outpus:
             - output: [bs, sum(hi*wi), 256]
         """
 
@@ -82,22 +75,24 @@ class DeformableTransformerEncoder(nn.Module):
 
         intermediate_output = []
         for layer_id, layer in enumerate(self.layers):
-            output = layer(src=output, pos=pos, reference_points=reference_points, spatial_shapes=spatial_shapes, level_start_index=level_start_index, key_padding_mask=key_padding_mask)
+            output = layer(
+                src=output,
+                pos=pos,
+                reference_points=reference_points,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+                key_padding_mask=key_padding_mask,
+            )
             intermediate_output.append(output)
-            
+
         if self.norm is not None:
             output = self.norm(output)
 
         return output, intermediate_output
 
 
-
 class DeformableTransformerEncoderLayer(nn.Module):
-    def __init__(self,
-                 d_model=256, d_ffn=1024,
-                 dropout=0.1, activation="relu",
-                 n_levels=4, n_heads=8, n_points=4
-                 ):
+    def __init__(self, d_model=256, d_ffn=1024, dropout=0.1, activation="relu", n_levels=4, n_heads=8, n_points=4):
         super().__init__()
         # self attention
         self.self_attn = MSDeformAttn(d_model, n_levels, n_heads, n_points)
@@ -123,9 +118,10 @@ class DeformableTransformerEncoderLayer(nn.Module):
         return src
 
     def forward(self, src, pos, reference_points, spatial_shapes, level_start_index, key_padding_mask=None):
-
         # self attention
-        src2 = self.self_attn(self.with_pos_embed(src, pos), reference_points, src, spatial_shapes, level_start_index, key_padding_mask)
+        src2 = self.self_attn(
+            self.with_pos_embed(src, pos), reference_points, src, spatial_shapes, level_start_index, key_padding_mask
+        )
         src = src + self.dropout1(src2)
         src = self.norm1(src)
 

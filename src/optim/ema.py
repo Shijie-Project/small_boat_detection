@@ -12,11 +12,12 @@ import torch.nn as nn
 from ..core import register
 from ..misc import dist_utils
 
+
 __all__ = ["ModelEMA"]
 
 
 @register()
-class ModelEMA(object):
+class ModelEMA:
     """
     Model Exponential Moving Average from https://github.com/rwightman/pytorch-image-models
     Keep a moving average of everything in the model state_dict (parameters and buffers).
@@ -27,9 +28,7 @@ class ModelEMA(object):
     GPU assignment and distributed training wrappers.
     """
 
-    def __init__(
-        self, model: nn.Module, decay: float = 0.9999, warmups: int = 1000, start: int = 0
-    ):
+    def __init__(self, model: nn.Module, decay: float = 0.9999, warmups: int = 1000, start: int = 0):
         super().__init__()
 
         self.module = deepcopy(dist_utils.de_parallel(model)).eval()

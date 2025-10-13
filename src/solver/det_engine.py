@@ -6,26 +6,28 @@ Modified from D-FINE (https://github.com/Peterande/D-FINE)
 Copyright (c) 2024 The D-FINE Authors. All Rights Reserved.
 """
 
+import concurrent.futures
 import math
+import os
 import sys
-from typing import Iterable
+import time
+from collections.abc import Iterable
 
 import torch
 import torch.amp
 from torch.cuda.amp.grad_scaler import GradScaler
 from torch.utils.tensorboard import SummaryWriter
 
-from tools.visualize_image_annotation import visualize_detection
 from tools.concatenate_images import concatenate_images
-import os
-import concurrent.futures
-import time
+from tools.visualize_image_annotation import visualize_detection
 
 from ..data import CocoEvaluator
 from ..misc import MetricLogger, SmoothedValue, dist_utils
 from ..optim import ModelEMA, Warmup
 
-SAVE_INTERMEDIATE_VISUALIZE_RESULT = os.environ.get('SAVE_INTERMEDIATE_VISUALIZE_RESULT', 'False') == 'True'
+
+SAVE_INTERMEDIATE_VISUALIZE_RESULT = os.environ.get("SAVE_INTERMEDIATE_VISUALIZE_RESULT", "False") == "True"
+
 
 def train_one_epoch(
     model: torch.nn.Module,
@@ -41,7 +43,7 @@ def train_one_epoch(
     criterion.train()
     metric_logger = MetricLogger(delimiter="  ")
     metric_logger.add_meter("lr", SmoothedValue(window_size=1, fmt="{value:.6f}"))
-    header = "Epoch: [{}]".format(epoch)
+    header = f"Epoch: [{epoch}]"
 
     print_freq = kwargs.get("print_freq", 10)
     writer: SummaryWriter = kwargs.get("writer", None)
@@ -50,14 +52,11 @@ def train_one_epoch(
     scaler: GradScaler = kwargs.get("scaler", None)
     lr_warmup_scheduler: Warmup = kwargs.get("lr_warmup_scheduler", None)
 
-    for i, (samples, targets) in enumerate(
-        metric_logger.log_every(data_loader, print_freq, header)
-    ):
-
+    for i, (samples, targets) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         no_gt = False
         num_gts = [len(t["labels"]) for t in targets]
         max_gt_num = max(num_gts)
-        if max_gt_num == 0: # no gt for denoising will cause error in model forward
+        if max_gt_num == 0:  # no gt for denoising will cause error in model forward
             no_gt = True
         samples = samples.to(device)
         targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
@@ -65,17 +64,16 @@ def train_one_epoch(
         metas = dict(epoch=epoch, step=i, global_step=global_step, epoch_step=len(data_loader))
 
         if SAVE_INTERMEDIATE_VISUALIZE_RESULT:
-            
             for b, target in enumerate(targets):
                 image = samples[b].cpu()
                 _, H, W = image.shape
                 target_cpu = {}
                 for k, v in target.items():
-                    if k == 'boxes':
+                    if k == "boxes":
                         target_cpu[k] = v.cpu().detach().clone() * torch.tensor([W, H, W, H])
                     else:
                         target_cpu[k] = v.cpu().detach().clone()
-                visualize_detection(image, target_cpu, f"sample_gt", return_image=False, type="xywh")
+                visualize_detection(image, target_cpu, "sample_gt", return_image=False, type="xywh")
 
         if scaler is not None:
             with torch.autocast(device_type=str(device), cache_enabled=True):
@@ -131,7 +129,7 @@ def train_one_epoch(
         loss_value = sum(loss_dict_reduced.values())
 
         if not math.isfinite(loss_value):
-            print("Loss is {}, stopping training".format(loss_value))
+            print(f"Loss is {loss_value}, stopping training")
             print(loss_dict_reduced)
             sys.exit(1)
 
@@ -160,7 +158,7 @@ def evaluate(
     coco_evaluator: CocoEvaluator,
     device,
 ):
-    SAVE_TEST_VISUALIZE_RESULT = os.environ.get('SAVE_TEST_VISUALIZE_RESULT', 'False') == 'True'
+    SAVE_TEST_VISUALIZE_RESULT = os.environ.get("SAVE_TEST_VISUALIZE_RESULT", "False") == "True"
     if SAVE_TEST_VISUALIZE_RESULT:
         os.makedirs("visualize_all", exist_ok=True)
         print("Saving visualize results to visualize_all/")
@@ -176,7 +174,7 @@ def evaluate(
     iou_types = coco_evaluator.iou_types
     # coco_evaluator = CocoEvaluator(base_ds, iou_types)
     # coco_evaluator.coco_eval[iou_types[0]].params.iouThrs = [0, 0.1, 0.5, 0.75]
-    
+
     # For defe Accuracy calculation
     if model.encoder.use_defe:
         total_defe_samples = 0
@@ -186,14 +184,14 @@ def evaluate(
     MAX_PENDING_TASKS = 256
     with concurrent.futures.ThreadPoolExecutor(max_workers=32) as executor:
         pending_futures = []
-        
+
         for samples, targets in metric_logger.log_every(data_loader, 10, header):
             samples = samples.to(device)
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
             image_ids = [t["image_id"].item() for t in targets]
             coco = data_loader.dataset.coco
-            file_names = [coco.loadImgs(id)[0]['file_name'] for id in image_ids]
+            file_names = [coco.loadImgs(id)[0]["file_name"] for id in image_ids]
 
             outputs = model(samples, targets=targets)
             orig_target_sizes = torch.stack([t["orig_size"] for t in targets], dim=0)
@@ -206,24 +204,18 @@ def evaluate(
                     sample_cpu = samples[i].cpu()
                     target_cpu = {k: v.cpu() for k, v in targets[i].items()}
                     result_cpu = {k: v.cpu() for k, v in results[i].items()}
-                    process_args.append((
-                        sample_cpu,
-                        target_cpu,
-                        result_cpu,
-                        file_names[i],
-                        scale_factor
-                    ))
-                
+                    process_args.append((sample_cpu, target_cpu, result_cpu, file_names[i], scale_factor))
+
                 if len(pending_futures) >= MAX_PENDING_TASKS:
                     while len(pending_futures) > 0:
                         done_futures = []
                         for future in pending_futures:
                             if future.done():
                                 done_futures.append(future)
-                        
+
                         for future in done_futures:
                             pending_futures.remove(future)
-                        
+
                         if not done_futures:
                             time.sleep(0.1)
 
@@ -237,11 +229,11 @@ def evaluate(
 
             if model.encoder.use_defe:
                 # For defe Ample Rate calculation
-                pred_defe = outputs['batch_queries_num'][0]
-                if pred_defe >= targets[0]['labels'].shape[0]:
+                pred_defe = outputs["batch_queries_num"][0]
+                if pred_defe >= targets[0]["labels"].shape[0]:
                     ample_defe_predictions += 1
                 total_defe_samples += 1
-                total_anchor_num += outputs['batch_queries_num'][0]
+                total_anchor_num += outputs["batch_queries_num"][0]
 
         concurrent.futures.wait(pending_futures)
 
@@ -275,6 +267,7 @@ def evaluate(
 def process_image_pair(args):
     sample, target, result, filename, scale_factor = args
     sample_img = visualize_detection(sample, target, f"sample_{filename}", return_image=True)
-    result_img = visualize_detection(sample, result, f"result_{filename}", 
-                                   scale_factor=scale_factor, return_image=True)
+    result_img = visualize_detection(
+        sample, result, f"result_{filename}", scale_factor=scale_factor, return_image=True
+    )
     concatenate_images(sample_img, result_img, output_path=f"visualize_all/{filename}")

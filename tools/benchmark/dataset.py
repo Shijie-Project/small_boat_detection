@@ -13,6 +13,7 @@ import torchvision.transforms as T
 import torchvision.transforms.functional as F
 from PIL import Image
 
+
 Image.MAX_IMAGE_PIXELS = None
 
 
@@ -74,9 +75,7 @@ class Dataset(data.Dataset):
     def __getitem__(self, index):
         # im = Image.open(self.img_path_list[index]).convert('RGB')
         im = torchvision.io.read_file(self.im_path_list[index])
-        im = torchvision.io.decode_jpeg(
-            im, mode=torchvision.io.ImageReadMode.RGB, device=self.device
-        )
+        im = torchvision.io.decode_jpeg(im, mode=torchvision.io.ImageReadMode.RGB, device=self.device)
         _, h, w = im.shape  # c,h,w
 
         im = self.preprocess(im)

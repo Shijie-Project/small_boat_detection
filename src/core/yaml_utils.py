@@ -5,11 +5,12 @@ Copyright(c) 2024 The D-FINE Authors. All Rights Reserved.
 
 import copy
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
 from .workspace import GLOBAL_CONFIG
+
 
 __all__ = [
     "load_config",
@@ -48,10 +49,10 @@ def load_config(file_path, cfg=dict()):
     return merge_dict(cfg, file_cfg)
 
 
-def merge_dict(dct, another_dct, inplace=True) -> Dict:
+def merge_dict(dct, another_dct, inplace=True) -> dict:
     """merge another_dct into dct"""
 
-    def _merge(dct, another) -> Dict:
+    def _merge(dct, another) -> dict:
         for k in another:
             if k in dct and isinstance(dct[k], dict) and isinstance(another[k], dict):
                 _merge(dct[k], another[k])
@@ -66,14 +67,14 @@ def merge_dict(dct, another_dct, inplace=True) -> Dict:
     return _merge(dct, another_dct)
 
 
-def dictify(s: str, v: Any) -> Dict:
+def dictify(s: str, v: Any) -> dict:
     if "." not in s:
         return {s: v}
     key, rest = s.split(".", 1)
     return {key: dictify(rest, v)}
 
 
-def parse_cli(nargs: List[str]) -> Dict:
+def parse_cli(nargs: list[str]) -> dict:
     """
     parse command-line arguments
         convert `a.c=3 b=10` to `{'a': {'c': 3}, 'b': 10}`

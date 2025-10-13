@@ -1,20 +1,20 @@
-'''
+"""
 Dome-DETR: Dome-DETR: DETR with Density-Oriented Feature-Query Manipulation for Efficient Tiny Object Detection
 Copyright (c) 2025 The Dome-DETR Authors. All Rights Reserved.
-'''
+"""
 
 import contextlib
 import copy
 import os
 
+import aitodpycocotools.mask as mask_util
 import numpy as np
 import torch
-from aitodpycocotools.cocoeval import COCOeval
 from aitodpycocotools.coco import COCO
-import aitodpycocotools.mask as mask_util
+from aitodpycocotools.cocoeval import COCOeval
 
-from ...core import register
 from ...misc import dist_utils
+
 
 __all__ = [
     "AitodCocoEvaluatorSlow",
@@ -22,7 +22,7 @@ __all__ = [
 
 
 # @register()
-class AitodCocoEvaluatorSlow(object):
+class AitodCocoEvaluatorSlow:
     def __init__(self, coco_gt, iou_types, useCats=True):
         assert isinstance(iou_types, (list, tuple))
         coco_gt = copy.deepcopy(coco_gt)
@@ -37,13 +37,11 @@ class AitodCocoEvaluatorSlow(object):
         self.img_ids = []
         self.eval_imgs = {k: [] for k in iou_types}
         self.useCats = useCats
-    
+
     def cleanup(self):
         self.coco_eval = {}
         for iou_type in self.iou_types:
-            self.coco_eval[iou_type] = COCOeval(
-                self.coco_gt, iouType=iou_type
-            )
+            self.coco_eval[iou_type] = COCOeval(self.coco_gt, iouType=iou_type)
         self.img_ids = []
         self.eval_imgs = {k: [] for k in self.iou_types}
 
@@ -55,7 +53,7 @@ class AitodCocoEvaluatorSlow(object):
             results = self.prepare(predictions, iou_type)
 
             # suppress pycocotools prints
-            with open(os.devnull, 'w') as devnull:
+            with open(os.devnull, "w") as devnull:
                 with contextlib.redirect_stdout(devnull):
                     coco_dt = COCO.loadRes(self.coco_gt, results) if results else COCO()
             coco_eval = self.coco_eval[iou_type]
@@ -78,7 +76,7 @@ class AitodCocoEvaluatorSlow(object):
 
     def summarize(self):
         for iou_type, coco_eval in self.coco_eval.items():
-            print("IoU metric: {}".format(iou_type))
+            print(f"IoU metric: {iou_type}")
             coco_eval.summarize()
 
     def prepare(self, predictions, iou_type):
@@ -89,7 +87,7 @@ class AitodCocoEvaluatorSlow(object):
         elif iou_type == "keypoints":
             return self.prepare_for_coco_keypoint(predictions)
         else:
-            raise ValueError("Unknown iou type {}".format(iou_type))
+            raise ValueError(f"Unknown iou type {iou_type}")
 
     def prepare_for_coco_detection(self, predictions):
         coco_results = []
@@ -108,7 +106,6 @@ class AitodCocoEvaluatorSlow(object):
             else:
                 labels = prediction["labels"]
 
-        
             try:
                 coco_results.extend(
                     [
@@ -122,7 +119,9 @@ class AitodCocoEvaluatorSlow(object):
                     ]
                 )
             except:
-                import ipdb; ipdb.set_trace()
+                import ipdb
+
+                ipdb.set_trace()
         return coco_results
 
     def prepare_for_coco_segmentation(self, predictions):
@@ -141,8 +140,7 @@ class AitodCocoEvaluatorSlow(object):
             labels = prediction["labels"].tolist()
 
             rles = [
-                mask_util.encode(np.array(mask[0, :, :, np.newaxis], dtype=np.uint8, order="F"))[0]
-                for mask in masks
+                mask_util.encode(np.array(mask[0, :, :, np.newaxis], dtype=np.uint8, order="F"))[0] for mask in masks
             ]
             for rle in rles:
                 rle["counts"] = rle["counts"].decode("utf-8")
@@ -178,7 +176,7 @@ class AitodCocoEvaluatorSlow(object):
                     {
                         "image_id": original_id,
                         "category_id": labels[k],
-                        'keypoints': keypoint,
+                        "keypoints": keypoint,
                         "score": scores[k],
                     }
                     for k, keypoint in enumerate(keypoints)
@@ -231,19 +229,18 @@ def create_common_coco_eval(coco_eval, img_ids, eval_imgs):
 
 
 def evaluate(self):
-    '''
+    """
     Run per image evaluation on given images and store results (a list of dict) in self.evalImgs
     :return: None
-    '''
+    """
     p = self.params
     # add backward compatibility if useSegm is specified in params
     if p.useSegm is not None:
-        p.iouType = 'segm' if p.useSegm == 1 else 'bbox'
-        print('useSegm (deprecated) is not None. Running {} evaluation'.format(p.iouType))
+        p.iouType = "segm" if p.useSegm == 1 else "bbox"
+        print(f"useSegm (deprecated) is not None. Running {p.iouType} evaluation")
     p.imgIds = list(np.unique(p.imgIds))
     if p.useCats:
         p.catIds = list(np.unique(p.catIds))
-    
 
     p.maxDets = sorted(p.maxDets)
     self.params = p
@@ -252,24 +249,17 @@ def evaluate(self):
     # loop through images, area range, max detection number
     catIds = p.catIds if p.useCats else [-1]
 
-    if p.iouType == 'segm' or p.iouType == 'bbox':
+    if p.iouType == "segm" or p.iouType == "bbox":
         computeIoU = self.computeIoU
-    elif p.iouType == 'keypoints':
+    elif p.iouType == "keypoints":
         computeIoU = self.computeOks
-    self.ious = {
-        (imgId, catId): computeIoU(imgId, catId)
-        for imgId in p.imgIds
-        for catId in catIds}
+    self.ious = {(imgId, catId): computeIoU(imgId, catId) for imgId in p.imgIds for catId in catIds}
 
     evaluateImg = self.evaluateImg
     maxDet = p.maxDets[-1]
 
-    
     evalImgs = [
-        evaluateImg(imgId, catId, areaRng, maxDet)
-        for catId in catIds
-        for areaRng in p.areaRng
-        for imgId in p.imgIds
+        evaluateImg(imgId, catId, areaRng, maxDet) for catId in catIds for areaRng in p.areaRng for imgId in p.imgIds
     ]
 
     # this is NOT in the pycocotools code, but could be done outside
@@ -277,6 +267,7 @@ def evaluate(self):
     self._paramsEval = copy.deepcopy(self.params)
 
     return p.imgIds, evalImgs
+
 
 #################################################################
 # end of straight copy from pycocotools, just removing the prints

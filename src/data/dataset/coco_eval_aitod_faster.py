@@ -1,7 +1,7 @@
-'''
+"""
 Dome-DETR: Dome-DETR: DETR with Density-Oriented Feature-Query Manipulation for Efficient Tiny Object Detection
 Copyright (c) 2025 The Dome-DETR Authors. All Rights Reserved.
-'''
+"""
 
 import contextlib
 import copy
@@ -15,19 +15,18 @@ from faster_coco_eval import COCO, COCOeval_faster
 from ...core import register
 from ...misc import dist_utils
 
+
 __all__ = [
     "AitodCocoFasterEvaluator",
 ]
 
 
 class AitodCOCOeval_faster(COCOeval_faster):
-
     def __init__(self, coco_gt, iou_type, print_function=print, separate_eval=True):
-        super(AitodCOCOeval_faster, self).__init__(coco_gt, iouType=iou_type, print_function=print_function, separate_eval=separate_eval)
+        super().__init__(coco_gt, iouType=iou_type, print_function=print_function, separate_eval=separate_eval)
         self.maxDets = [1, 100, 1500]
-        self.areaRng = [[0**2, 1e5**2], [0**2, 8**2], [8**2, 16**2], [16**2, 32**2],
-                        [32**2, 1e5**2]]
-        self.areaRngLbl = ['all', 'verytiny', 'tiny', 'small', 'medium']
+        self.areaRng = [[0**2, 1e5**2], [0**2, 8**2], [8**2, 16**2], [16**2, 32**2], [32**2, 1e5**2]]
+        self.areaRngLbl = ["all", "verytiny", "tiny", "small", "medium"]
 
     def summarize(self):
         """Compute and display summary metrics for evaluation results.
@@ -41,38 +40,20 @@ class AitodCOCOeval_faster(COCOeval_faster):
             stats = np.zeros((_count,))
 
             stats[0] = self._summarize(1, maxDets=self.params.maxDets[2])
-            stats[1] = self._summarize(1, iouThr=.25, maxDets=self.params.maxDets[2])
-            stats[2] = self._summarize(1, iouThr=.5, maxDets=self.params.maxDets[2])
-            stats[3] = self._summarize(1,
-                                  iouThr=.75,
-                                  maxDets=self.params.maxDets[2])
-            stats[4] = self._summarize(1,
-                                  areaRng='verytiny',
-                                  maxDets=self.params.maxDets[2])
-            stats[5] = self._summarize(1,
-                                  areaRng='tiny',
-                                  maxDets=self.params.maxDets[2])
-            stats[6] = self._summarize(1,
-                                  areaRng='small',
-                                  maxDets=self.params.maxDets[2])
-            stats[7] = self._summarize(1,
-                                  areaRng='medium',
-                                  maxDets=self.params.maxDets[2])
+            stats[1] = self._summarize(1, iouThr=0.25, maxDets=self.params.maxDets[2])
+            stats[2] = self._summarize(1, iouThr=0.5, maxDets=self.params.maxDets[2])
+            stats[3] = self._summarize(1, iouThr=0.75, maxDets=self.params.maxDets[2])
+            stats[4] = self._summarize(1, areaRng="verytiny", maxDets=self.params.maxDets[2])
+            stats[5] = self._summarize(1, areaRng="tiny", maxDets=self.params.maxDets[2])
+            stats[6] = self._summarize(1, areaRng="small", maxDets=self.params.maxDets[2])
+            stats[7] = self._summarize(1, areaRng="medium", maxDets=self.params.maxDets[2])
             stats[8] = self._summarize(0, maxDets=self.params.maxDets[0])
             stats[9] = self._summarize(0, maxDets=self.params.maxDets[1])
             stats[10] = self._summarize(0, maxDets=self.params.maxDets[2])
-            stats[11] = self._summarize(0,
-                                  areaRng='verytiny',
-                                  maxDets=self.params.maxDets[2])
-            stats[12] = self._summarize(0,
-                                   areaRng='tiny',
-                                   maxDets=self.params.maxDets[2])
-            stats[13] = self._summarize(0,
-                                   areaRng='small',
-                                   maxDets=self.params.maxDets[2])
-            stats[14] = self._summarize(0,
-                                   areaRng='medium',
-                                   maxDets=self.params.maxDets[2])
+            stats[11] = self._summarize(0, areaRng="verytiny", maxDets=self.params.maxDets[2])
+            stats[12] = self._summarize(0, areaRng="tiny", maxDets=self.params.maxDets[2])
+            stats[13] = self._summarize(0, areaRng="small", maxDets=self.params.maxDets[2])
+            stats[14] = self._summarize(0, areaRng="medium", maxDets=self.params.maxDets[2])
 
             if self.lvis_style:
                 stats[15] = self._summarize(1, maxDets=self.params.maxDets[-1], freq_group_idx=0)  # APr
@@ -110,11 +91,15 @@ class AitodCOCOeval_faster(COCOeval_faster):
             titleStr = "Average Precision"
             typeStr = "(AP)"
             iouStr = f"{p.iouThrs[0]:0.2f}:{p.iouThrs[-1]:0.2f}"
-            self.print_function(iStr.format(titleStr, typeStr, iouStr, "easy", self.params.maxDets[-1], type_result[0]))
+            self.print_function(
+                iStr.format(titleStr, typeStr, iouStr, "easy", self.params.maxDets[-1], type_result[0])
+            )
             self.print_function(
                 iStr.format(titleStr, typeStr, iouStr, "medium", self.params.maxDets[-1], type_result[1])
             )
-            self.print_function(iStr.format(titleStr, typeStr, iouStr, "hard", self.params.maxDets[-1], type_result[2]))
+            self.print_function(
+                iStr.format(titleStr, typeStr, iouStr, "hard", self.params.maxDets[-1], type_result[2])
+            )
             stats[6] = type_result[0]  # AP_easy
             stats[7] = type_result[1]  # AP_medium
             stats[8] = type_result[2]  # AP_hard
@@ -126,7 +111,7 @@ class AitodCOCOeval_faster(COCOeval_faster):
 
         iouType = self.params.iouType
 
-        if iouType in set(["segm", "bbox", "boundary"]):
+        if iouType in {"segm", "bbox", "boundary"}:
             summarize = _summarizeDets
         elif iouType == "keypoints":
             summarize = _summarizeKps
@@ -139,9 +124,8 @@ class AitodCOCOeval_faster(COCOeval_faster):
         self.stats = self.all_stats[:12]
 
 
-
 @register()
-class AitodCocoFasterEvaluator(object):
+class AitodCocoFasterEvaluator:
     def __init__(self, coco_gt, iou_types):
         assert isinstance(iou_types, (list, tuple))
         coco_gt = copy.deepcopy(coco_gt)
@@ -205,7 +189,7 @@ class AitodCocoFasterEvaluator(object):
 
     def summarize(self):
         for iou_type, coco_eval in self.coco_eval.items():
-            print("IoU metric: {}".format(iou_type))
+            print(f"IoU metric: {iou_type}")
             coco_eval.summarize()
 
     def prepare(self, predictions, iou_type):
@@ -216,7 +200,7 @@ class AitodCocoFasterEvaluator(object):
         elif iou_type == "keypoints":
             return self.prepare_for_coco_keypoint(predictions)
         else:
-            raise ValueError("Unknown iou type {}".format(iou_type))
+            raise ValueError(f"Unknown iou type {iou_type}")
 
     def prepare_for_coco_detection(self, predictions):
         coco_results = []
@@ -258,8 +242,7 @@ class AitodCocoFasterEvaluator(object):
             labels = prediction["labels"].tolist()
 
             rles = [
-                mask_util.encode(np.array(mask[0, :, :, np.newaxis], dtype=np.uint8, order="F"))[0]
-                for mask in masks
+                mask_util.encode(np.array(mask[0, :, :, np.newaxis], dtype=np.uint8, order="F"))[0] for mask in masks
             ]
             for rle in rles:
                 rle["counts"] = rle["counts"].decode("utf-8")

@@ -11,12 +11,13 @@ from .coco_dataset import (
     mscoco_category2name,
     mscoco_label2category,
 )
-from .coco_eval_slow import CocoEvaluatorSlow
 from .coco_eval import CocoEvaluator
 from .coco_eval_aitod import AitodCocoEvaluator
+from .coco_eval_aitod_faster import AitodCocoFasterEvaluator
+from .coco_eval_slow import CocoEvaluatorSlow
+
 # from .coco_eval_aitod_slow import AitodCocoEvaluatorSlow
 from .coco_eval_visdrone import VisdroneCocoEvaluator
-from .coco_eval_aitod_faster import AitodCocoFasterEvaluator
 from .coco_utils import get_coco_api_from_dataset
 from .voc_detection import VOCDetection
 from .voc_eval import VOCEvaluator
