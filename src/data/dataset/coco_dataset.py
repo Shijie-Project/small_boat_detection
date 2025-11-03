@@ -14,7 +14,6 @@ from PIL import Image
 
 from ...core import register
 from .._misc import convert_to_tv_tensor
-from ._dataset import DetDataset
 
 
 torchvision.disable_beta_transforms_warning()
@@ -25,7 +24,7 @@ __all__ = ["CocoDetection"]
 
 
 @register()
-class CocoDetection(torchvision.datasets.CocoDetection, DetDataset):
+class CocoDetection(torchvision.datasets.CocoDetection):
     __inject__ = ["transforms"]
     __share__ = ["remap_mscoco_category"]
 
@@ -82,12 +81,87 @@ class CocoDetection(torchvision.datasets.CocoDetection, DetDataset):
         return {cat["id"]: cat["name"] for cat in self.categories}
 
     @property
+    def name2category(self):
+        return {cat["name"]: cat["id"] for cat in self.categories}
+
+    @property
     def category2label(self):
         return {cat["id"]: i for i, cat in enumerate(self.categories)}
 
     @property
     def label2category(self):
         return {i: cat["id"] for i, cat in enumerate(self.categories)}
+
+    def set_epoch(self, epoch) -> None:
+        self._epoch = epoch
+
+    @property
+    def epoch(self):
+        return self._epoch if hasattr(self, "_epoch") else -1
+
+
+@register()
+class SingleCocoDetection(CocoDetection):
+    def __init__(
+        self, img_folder, ann_file, transforms, return_masks=False, remap_mscoco_category=False, class_name="ship"
+    ):
+        super().__init__(img_folder, ann_file, transforms, return_masks, remap_mscoco_category)
+        self.filtered_ids = self.filter_imgs(class_name)
+
+    def filter_imgs(self, class_name):
+        assert class_name in self.name2category
+
+        class_id = self.name2category[class_name]
+
+        max_num = 0
+        filtered_ids = []
+        # box_areas = {}
+        for img_id in self.ids:
+            target = self._load_target(img_id)
+            if all(t["category_id"] == class_id for t in target):
+                filtered_ids.append(img_id)
+                max_num = max(max_num, len(target))
+
+            # for t in target:
+            #     area = t.get("area", None)
+            # if area is not None:
+            #     category_name = self.category2name[t["category_id"]]
+            # if category_name not in box_areas:
+            #     box_areas[category_name] = []
+            # box_areas[category_name].append(math.sqrt(area))
+        print(
+            f"Filtered {len(self.ids)} images to {len(filtered_ids)} images with only class: {class_name}. MaxNum={max_num}."
+        )
+
+        # n_classes = len(box_areas)
+        # n_cols = 4  # 每行放几个 subplot，你可以改
+        # n_rows = (n_classes + n_cols - 1) // n_cols
+        #
+        # fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows))
+        # axes = axes.flatten()  # 方便按一维索引访问
+        #
+        # for i, (cls, sizes) in enumerate(box_areas.items()):
+        #     ax = axes[i]
+        #     sns.histplot(sizes, bins=50, kde=False, color='skyblue', ax=ax)
+        #     ax.set_xlabel("Instances' sizes")
+        #     ax.set_ylabel("Instance Count")
+        #     ax.set_title(f"Class: {cls}")
+        #
+        # # 如果 subplot 数量多于类的数量，隐藏多余的
+        # for j in range(i + 1, len(axes)):
+        #     axes[j].set_visible(False)
+        #
+        # plt.tight_layout()
+        # plt.savefig("hist.png")
+
+        return filtered_ids
+
+    def __getitem__(self, idx):
+        old_idx = self.filtered_ids[idx]
+        return super().__getitem__(old_idx)
+
+    def __len__(self):
+        return len(self.filtered_ids)
 
 
 def convert_coco_poly_to_mask(segmentations, height, width):
