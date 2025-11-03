@@ -664,10 +664,7 @@ class DomeTransformer(nn.Module):
                         OrderedDict(
                             [
                                 ("conv", nn.Conv2d(in_channels, self.hidden_dim, 1, bias=False)),
-                                (
-                                    "norm",
-                                    nn.BatchNorm2d(self.hidden_dim),
-                                ),
+                                ("norm", nn.BatchNorm2d(self.hidden_dim)),
                             ]
                         )
                     )
