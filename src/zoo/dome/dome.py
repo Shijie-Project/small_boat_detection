@@ -11,6 +11,9 @@ import torch.nn as nn
 from ...core import register
 
 
+VISUALIZE_BACKBONE = False
+
+
 __all__ = ["DOME"]
 
 
@@ -23,6 +26,21 @@ class DOME(nn.Module):
         self.backbone = backbone
         self.decoder = decoder
         self.encoder = encoder
+
+        if VISUALIZE_BACKBONE:
+            import torch
+            from torchview import draw_graph
+
+            dummy_input = torch.randn(1, 3, 224, 224)
+
+            draw_graph(
+                self.backbone,
+                input_data=dummy_input,
+                expand_nested=True,  # 展开所有子模块
+                save_graph=True,  # 是否保存
+                directory=".",  # 保存路径
+                filename="hgnetv2_structure",
+            )
 
     def forward(self, x, targets=None):
         img_inputs = x.clone()
