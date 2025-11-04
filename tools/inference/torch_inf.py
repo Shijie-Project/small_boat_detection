@@ -31,9 +31,11 @@ def draw(images, labels, boxes, scores, thrh=0.4):
 
         for j, b in enumerate(box):
             draw.rectangle(list(b), outline="red")
+            score = round(scrs[j].item(), 2)
+            print(score)
             draw.text(
                 (b[0], b[1]),
-                text=f"{lab[j].item()} {round(scrs[j].item(), 2)}",
+                text=f"{lab[j].item()} {score}",
                 fill="blue",
             )
 
@@ -101,7 +103,7 @@ def process_image(model, device, file_path, annotation_file=None):
     target = None
     if annotation_file:
         target = load_coco_annotation(file_path, annotation_file)
-    output = model(im_data, orig_size, [target])
+    output = model(im_data, orig_size, target if target is None else [target])
     labels, boxes, scores = output
 
     draw([im_pil], labels, boxes, scores)
@@ -199,7 +201,7 @@ def main(args):
 
     # Check if the input file is an image or a video
     file_path = args.input
-    if os.path.splitext(file_path)[-1].lower() in [".jpg", ".jpeg", ".png", ".bmp"]:
+    if os.path.splitext(file_path)[-1].lower() in [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"]:
         # Process as image
         process_image(model, device, file_path, annotation_file=args.annotation)
         print("Image processing complete.")

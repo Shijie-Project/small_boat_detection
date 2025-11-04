@@ -11,8 +11,8 @@ train_dataloader:
   type: DataLoader
   dataset:
     type: CocoDetection
-    img_folder: /data/shijli/datasets/aitod/images/trainval
-    ann_file: /data/shijli/datasets/aitod/annotations/aitodv2_trainval.json
+    img_folder: /data/shijili/datasets/aitod/images/trainval
+    ann_file: /data/shijili/datasets/aitod/annotations/aitodv2_trainval.json
     return_masks: False
     transforms:
       type: Compose
@@ -28,8 +28,8 @@ val_dataloader:
   type: DataLoader
   dataset:
     type: CocoDetection
-    img_folder:  /data/shijli/datasets/aitod/images/test
-    ann_file: /data/shijli/datasets/aitod/annotations/aitodv2_test.json
+    img_folder:  /data/shijili/datasets/aitod/images/test
+    ann_file: /data/shijili/datasets/aitod/annotations/aitodv2_test.json
     return_masks: False
     transforms:
       type: Compose
