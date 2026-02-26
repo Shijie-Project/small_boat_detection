@@ -9,7 +9,6 @@ Copyright (c) 2024 The D-FINE Authors. All Rights Reserved.
 import copy
 import os
 import random
-from collections import OrderedDict
 from math import ceil
 
 import torch
@@ -18,7 +17,6 @@ import torch.nn.functional as F
 
 from src.zoo.dome.get_roi_features import TransformerEncoder, TransformerEncoderLayer, WindowProcessor
 
-# from .deformable_encoder import DeformableTransformerEncoderLayer,  DeformableTransformerEncoder
 from ...core import register
 from .defe import GaussHeatmapGenerator, LiteDeFE
 from .utils import get_activation
@@ -298,19 +296,16 @@ class HybridEncoder(nn.Module):
         # channel projection
         self.input_proj = nn.ModuleList()
         for in_channel in in_channels:
-            proj = nn.Sequential(
-                OrderedDict(
-                    [
-                        ("conv", nn.Conv2d(in_channel, hidden_dim, kernel_size=1, bias=False)),
-                        ("norm", nn.BatchNorm2d(hidden_dim)),
-                    ]
-                )
-            )
+            proj = nn.Sequential()
+            proj.add_module("conv", nn.Conv2d(in_channel, hidden_dim, kernel_size=1, bias=False))
+            proj.add_module("norm", nn.BatchNorm2d(hidden_dim))
 
             self.input_proj.append(proj)
 
         # encoder transformer
         if self.use_deformable:
+            from .deformable_encoder import DeformableTransformerEncoder, DeformableTransformerEncoderLayer
+
             if self.num_encoder_layers > 0:
                 encoder_layer = DeformableTransformerEncoderLayer(
                     hidden_dim, dim_feedforward, dropout, enc_act, num_feature_levels, nhead, enc_n_points
@@ -468,7 +463,6 @@ class HybridEncoder(nn.Module):
             defe_feature_filtered: 调整后的二值掩码 [B, 1, H, W]
         """
         B = defe_feature.shape[0]
-        device = defe_feature.device
         final_mask = torch.zeros_like(defe_feature, dtype=torch.bool)
 
         # 对每个样本独立处理
