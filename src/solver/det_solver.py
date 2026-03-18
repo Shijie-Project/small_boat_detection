@@ -46,7 +46,7 @@ class DetSolver(BaseSolver):
         best_stat = {
             "epoch": -1,
         }
-        if self.last_epoch > 0:
+        if self.last_epoch > 0 or self.cfg.eval_at_beginning:
             module = self.ema.module if self.ema else self.model
             test_stats, coco_evaluator = evaluate(
                 module,

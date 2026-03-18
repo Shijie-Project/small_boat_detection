@@ -73,6 +73,8 @@ class BaseConfig:
         self.summary_dir: str = None
         self.device: str = ""
 
+        self.eval_at_beginning: bool = False
+
     @property
     def model(self) -> nn.Module:
         return self._model
@@ -135,6 +137,7 @@ class BaseConfig:
                 num_workers=self.num_workers,
                 collate_fn=self.collate_fn,
                 shuffle=self.train_shuffle,
+                persistent_workers=True,
             )
             loader.shuffle = self.train_shuffle
             self._train_dataloader = loader
