@@ -5,8 +5,11 @@ Mostly copy-paste from https://github.com/pytorch/vision/blob/13b35ff/references
 Copyright(c) 2024 The D-FINE Authors. All Rights Reserved.
 """
 
+import os.path as osp
+
 import faster_coco_eval
 import faster_coco_eval.core.mask as coco_mask
+import numpy as np
 import torch
 import torch.utils.data
 import torchvision
@@ -29,6 +32,8 @@ class CocoDetection(torchvision.datasets.CocoDetection):
     __share__ = ["remap_mscoco_category"]
 
     def __init__(self, img_folder, ann_file, transforms, return_masks=False, remap_mscoco_category=False):
+        img_folder = osp.expanduser(img_folder)
+        ann_file = osp.expanduser(ann_file)
         super().__init__(img_folder, ann_file)
         self._transforms = transforms
         self.prepare = ConvertCocoPolysToMask(return_masks)
@@ -162,6 +167,102 @@ class SingleCocoDetection(CocoDetection):
 
     def __len__(self):
         return len(self.filtered_ids)
+
+
+@register()
+class CustomDataset(CocoDetection):
+    AITOD_MAP = {
+        "airplane": 0,
+        "bridge": 1,
+        "person": 6,
+        "ship": 3,
+        "storage-tank": 2,
+        "swimming-pool": 4,
+        "vehicle": 5,
+        "wind-mill": 7,
+    }
+    CUSTOM_MAP = {
+        "10m-12m": 0,
+        "12m-15m": 1,
+        "15m-20m": 2,
+        "5m-8m": 3,
+        "8m-10m": 4,
+        "<5m": 5,
+        ">20m": 6,
+        "Boat": 12,
+        "moderate": 7,
+        "none": 8,
+        "ship": 9,
+        "strong": 10,
+        "weak": 11,
+    }
+
+    __inject__ = ["transforms"]
+    __share__ = ["remap_mscoco_category"]
+
+    def __init__(
+        self,
+        img_folder,
+        ann_file,
+        transforms,
+        return_masks=False,
+        remap_mscoco_category=False,
+        train_ratio=None,
+        val_ratio=None,
+        seed=42,
+    ):
+        if train_ratio is not None and val_ratio is not None:
+            raise ValueError("为了保证逻辑严密，train_ratio 和 val_ratio 不能同时设置，请只设置其中一个或都不设置。")
+
+        super().__init__(img_folder, ann_file, transforms, return_masks, remap_mscoco_category)
+
+        num_samples = len(self.ids)
+        indices = np.arange(num_samples)
+
+        # 使用固定种子进行打乱，确保每次运行、不同 split 得到的划分是完全一致的
+        rng = np.random.default_rng(seed)
+        rng.shuffle(indices)
+
+        # 3. 计算划分边界
+        # 优先级：如果设置了 train_ratio，则取前 N 个；如果设置了 val_ratio，则取后 M 个
+        if train_ratio is not None:
+            assert 0 < train_ratio <= 1.0
+            split_idx = int(num_samples * train_ratio)
+            self.subset_indices = indices[:split_idx]
+        elif val_ratio is not None:
+            assert 0 < val_ratio <= 1.0
+            split_idx = int(num_samples * (1 - val_ratio))
+            self.subset_indices = indices[split_idx:]
+        else:
+            # 都不设置，则使用全量数据
+            self.subset_indices = indices
+
+        # 更新当前 Dataset 实际持有的 ID 列表
+        self.ids = [self.ids[i] for i in self.subset_indices]
+
+    def load_item(self, idx):
+        image, target = super(CocoDetection, self).__getitem__(idx)
+        image_id = self.ids[idx]
+
+        for t in target:
+            t["category_id"] = self.AITOD_MAP["ship"]
+
+        target = {"image_id": image_id, "annotations": target}
+
+        if self.remap_mscoco_category:
+            image, target = self.prepare(image, target, category2label=mscoco_category2label)
+        else:
+            image, target = self.prepare(image, target)
+
+        target["idx"] = torch.tensor([idx])
+
+        if "boxes" in target:
+            target["boxes"] = convert_to_tv_tensor(target["boxes"], key="boxes", spatial_size=image.size[::-1])
+
+        if "masks" in target:
+            target["masks"] = convert_to_tv_tensor(target["masks"], key="masks")
+
+        return image, target
 
 
 def convert_coco_poly_to_mask(segmentations, height, width):
