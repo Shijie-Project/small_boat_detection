@@ -1,0 +1,46 @@
+task: detection
+
+evaluator:
+  type: AitodCocoEvaluator
+  iou_types: ['bbox', ]
+
+num_classes: 9 # your dataset classes
+remap_mscoco_category: False
+
+train_dataloader:
+  type: DataLoader
+  dataset:
+    type: CustomDataset
+    img_folder: ../data/images/train
+    ann_file: ../data/annotations/train.json
+    return_masks: False
+    train_ratio: null  # use the full dataset for training
+    transforms:
+      type: Compose
+      ops: ~
+  shuffle: True
+  num_workers: 4
+  drop_last: True
+  collate_fn:
+    type: BatchImageCollateFunction
+    mwas_window_size: 16
+
+
+
+val_dataloader:
+  type: DataLoader
+  dataset:
+    type: CustomDataset
+    img_folder: ../data/images/train
+    ann_file: ../data/annotations/train.json
+    return_masks: False
+    val_ratio: null  # # use the full dataset for evaluation
+    transforms:
+      type: Compose
+      ops: ~
+  shuffle: False
+  num_workers: 4
+  drop_last: False
+  collate_fn:
+    type: BatchImageCollateFunction
+    mwas_window_size: 16
