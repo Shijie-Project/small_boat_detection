@@ -107,10 +107,15 @@ class YAMLConfig(BaseConfig):
         ]
         if self._evaluator is None and "evaluator" in self.yaml_cfg:
             if self.yaml_cfg["evaluator"]["type"] in implementedEvaluators:
+                from functools import partial
+
                 from ..data import get_coco_api_from_dataset
+                from ..misc.logger import tee_print
+
+                print_func = partial(tee_print, file_path=self.output_dir.joinpath("log.txt"))
 
                 base_ds = get_coco_api_from_dataset(self.val_dataloader.dataset)
-                self._evaluator = create("evaluator", self.global_cfg, coco_gt=base_ds)
+                self._evaluator = create("evaluator", self.global_cfg, coco_gt=base_ds, print_func=print_func)
             else:
                 raise NotImplementedError(f"{self.yaml_cfg['evaluator']['type']}")
         return super().evaluator
