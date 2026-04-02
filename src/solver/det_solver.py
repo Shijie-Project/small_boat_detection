@@ -161,9 +161,7 @@ class DetSolver(BaseSolver):
 
                 elif epoch >= self.train_dataloader.collate_fn.stop_epoch:
                     if self.not_improved_count >= self.patience:
-                        best_stat = {
-                            "epoch": -1,
-                        }
+                        best_stat = {"epoch": -1}
                         self.ema.decay -= 0.0001
                         self.not_improved_count = 0
                         if self.stage2_reload == "stage2":
@@ -195,10 +193,7 @@ class DetSolver(BaseSolver):
                         if epoch % 50 == 0:
                             filenames.append(f"{epoch:03}.pth")
                         for name in filenames:
-                            torch.save(
-                                coco_evaluator.coco_eval["bbox"].eval,
-                                self.output_dir / "eval" / name,
-                            )
+                            torch.save(coco_evaluator.coco_eval["bbox"].eval, self.output_dir / "eval" / name)
 
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -219,7 +214,9 @@ class DetSolver(BaseSolver):
         )
 
         if self.output_dir:
-            dist_utils.save_on_master(coco_evaluator.coco_eval["bbox"].eval, self.output_dir / "eval.pth")
-            dist_utils.save_on_master(coco_evaluator.predictions["bbox"], self.output_dir / "predictions.pth")
+            if dist_utils.is_main_process():
+                torch.save(coco_evaluator.coco_eval["bbox"].eval, self.output_dir.joinpath("eval.pth"))
+                with open(self.output_dir.joinpath("predictions.json"), "w") as f:
+                    json.dump(coco_evaluator.predictions["bbox"], f)
 
         return
