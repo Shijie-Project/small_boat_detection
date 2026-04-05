@@ -1,0 +1,1 @@
+python train.py -c ./configs/dome/Dome-M-custom.yml -t ../ckpts/Dome-M-AITOD-best.pth --seed=42
