@@ -44,8 +44,14 @@ def main(args) -> None:
     update_dict.update({k: v for k, v in args.__dict__.items() if k not in ["update"] and v is not None})
 
     cfg = YAMLConfig(args.config, **update_dict)
+
     split = "test" if args.test_only else "train"
-    cfg.output_dir = (Path(cfg.output_dir) / split / time.strftime("%Y%m%d-%H%M%S")).resolve()
+    if split == "train":
+        cfg.output_dir = (Path(cfg.output_dir) / split / time.strftime("%Y%m%d-%H%M%S")).resolve()
+    else:
+        assert cfg.resume is not None
+        cfg.output_dir = (Path(cfg.resume).parent / time.strftime("%Y%m%d-%H%M%S")).resolve()
+
     cfg.output_dir.mkdir(exist_ok=True, parents=True)
 
     if args.resume or args.tuning:
