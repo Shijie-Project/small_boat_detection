@@ -9,6 +9,7 @@ import pickle
 import time
 from collections import defaultdict, deque
 from pathlib import Path
+from typing import Callable
 
 import torch
 import torch.distributed as tdist
@@ -151,11 +152,11 @@ def reduce_dict(input_dict, average=True) -> dict[str, torch.Tensor]:
 
 
 class MetricLogger:
-    def __init__(self, delimiter="\t", output_dir=None):
+    def __init__(self, delimiter="\t", print_func: Callable = print):
         self.meters = defaultdict(SmoothedValue)
         self.delimiter = delimiter
 
-        self.file_path = output_dir if output_dir is None else Path(output_dir).joinpath("log.txt")
+        self.print_func = print_func
 
     def update(self, **kwargs):
         for k, v in kwargs.items():
@@ -245,7 +246,7 @@ class MetricLogger:
                         data=str(data_time),
                     )
 
-                tee_print(msg, file_path=self.file_path)
+                self.print_func(msg)
 
             i += 1
             end = time.time()

@@ -53,6 +53,8 @@ class DetSolver(BaseSolver):
                 self.val_dataloader,
                 self.evaluator,
                 self.device,
+                output_dir=self.output_dir,
+                log_file=self.output_dir.joinpath("log.txt"),
             )
             for k in test_stats:
                 best_stat["epoch"] = self.last_epoch
@@ -91,6 +93,7 @@ class DetSolver(BaseSolver):
                 scaler=self.scaler,
                 lr_warmup_scheduler=self.lr_warmup_scheduler,
                 writer=self.writer,
+                log_file=self.output_dir.joinpath("log.txt"),
             )
 
             print("Training state finished.")
@@ -119,6 +122,8 @@ class DetSolver(BaseSolver):
                 self.val_dataloader,
                 self.evaluator,
                 self.device,
+                output_dir=self.output_dir,
+                log_file=self.output_dir.joinpath("log.txt"),
             )
 
             # TODO
@@ -211,6 +216,7 @@ class DetSolver(BaseSolver):
             self.evaluator,
             self.device,
             output_dir=self.output_dir,
+            log_file=self.output_dir.joinpath("log.txt"),
         )
 
         if self.output_dir:

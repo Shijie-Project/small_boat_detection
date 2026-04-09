@@ -12,6 +12,7 @@ import os
 import sys
 import time
 from collections.abc import Iterable
+from functools import partial
 from pathlib import Path
 
 import torch
@@ -24,6 +25,7 @@ from tools.visualize_image_annotation import visualize_detection
 
 from ..data import CocoEvaluator
 from ..misc import MetricLogger, SmoothedValue, dist_utils
+from ..misc.logger import tee_print
 from ..optim import ModelEMA, Warmup
 
 
@@ -43,9 +45,15 @@ def train_one_epoch(
     max_norm: float = 0,
     **kwargs,
 ):
+    log_file = Path(kwargs.get("log_file", None))
+    if log_file is None:
+        print_func = print
+    else:
+        print_func = partial(tee_print, file_path=log_file)
+
     model.train()
     criterion.train()
-    metric_logger = MetricLogger(delimiter="  ")
+    metric_logger = MetricLogger(delimiter="  ", print_func=print_func)
     metric_logger.add_meter("lr", SmoothedValue(window_size=1, fmt="{value:.6f}"))
     header = f"Epoch: [{epoch}]"
 
@@ -144,7 +152,7 @@ def train_one_epoch(
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
-    print("Averaged stats:", metric_logger)
+    print_func(f"Averaged stats: {metric_logger}")
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 
@@ -156,9 +164,14 @@ def evaluate(
     data_loader,
     coco_evaluator: CocoEvaluator,
     device,
+    output_dir,
     **kwargs,
 ):
-    output_dir = Path(kwargs.get("output_dir", "./output"))
+    log_file = Path(kwargs.get("log_file", None))
+    if log_file is None:
+        print_func = print
+    else:
+        print_func = partial(tee_print, file_path=log_file)
 
     if SAVE_TEST_VISUALIZE_RESULT:
         visualize_dir = output_dir.joinpath("visualize_results")
@@ -169,7 +182,7 @@ def evaluate(
     criterion.eval()
     coco_evaluator.cleanup()
 
-    metric_logger = MetricLogger(delimiter="  ", output_dir=output_dir)
+    metric_logger = MetricLogger(delimiter="  ", print_func=print_func)
     # metric_logger.add_meter('class_error', SmoothedValue(window_size=1, fmt='{value:.2f}'))
     header = "Test:"
 
@@ -249,11 +262,11 @@ def evaluate(
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
-    print("Averaged stats:", metric_logger)
+    print_func(f"Averaged stats: {metric_logger}")
 
     if model.encoder.use_defe:
-        print("defe Ample Rate:", ample_defe_predictions / total_defe_samples)
-        print("defe Average Anchor Number:", total_anchor_num / total_defe_samples)
+        print_func(f"defe Ample Rate: {ample_defe_predictions / total_defe_samples}")
+        print_func(f"defe Average Anchor Number: {total_anchor_num / total_defe_samples}")
 
     if coco_evaluator is not None:
         coco_evaluator.synchronize_between_processes()
