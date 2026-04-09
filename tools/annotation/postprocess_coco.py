@@ -3,14 +3,19 @@ import os
 from typing import Literal
 
 
+SplitType = Literal["train", "val", "test", "all"]
+
+
 AITOD_SHIP_CATEGORY_ID = 3
 
 
-def process_file(split: Literal["train", "val", "test"]) -> None:
+def process_file(split: SplitType) -> None:
     """
     Strip directory prefixes from image filenames in a COCO-format JSON file,
     retaining only the base filename for each image entry.
     """
+    assert split in ["train", "val", "test", "all"]
+
     input_file = f"./annotations/{split}_coco.json"
 
     try:
@@ -38,4 +43,4 @@ def process_file(split: Literal["train", "val", "test"]) -> None:
 
 
 if __name__ == "__main__":
-    process_file(split=None)
+    process_file(split="all")

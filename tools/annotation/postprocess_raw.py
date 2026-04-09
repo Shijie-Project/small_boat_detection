@@ -4,6 +4,9 @@ import urllib.parse
 from typing import Literal
 
 
+SplitType = Literal["train", "val", "test", "all"]
+
+
 def normalize_label_studio_path(path_str: str, new_path: str | None = None) -> str:
     """
     Normalize a Label Studio image path for cross-platform compatibility.
@@ -39,12 +42,12 @@ def normalize_label_studio_path(path_str: str, new_path: str | None = None) -> s
     return normalized_path
 
 
-def process_file(split: Literal["train", "val", "test"]) -> None:
+def process_file(split: SplitType) -> None:
     """
     Read a Label Studio JSON export, normalize image paths, deduplicate tasks
     by filename, and write the result to a new file.
     """
-    assert split in ["train", "val", "test"]
+    assert split in ["train", "val", "test", "all"]
 
     input_file = f"./annotations/{split}_raw.json"
     remapped_image_dir = f"/images/{split}"
@@ -87,4 +90,4 @@ def process_file(split: Literal["train", "val", "test"]) -> None:
 
 
 if __name__ == "__main__":
-    process_file(split=None)
+    process_file(split="all")
