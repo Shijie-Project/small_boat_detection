@@ -248,9 +248,21 @@ def main():
         help="prefix prepended to file_name to build the image URL",
     )
     ap.add_argument("--images-dir", default=None, help="directory containing all images")
+    ap.add_argument(
+        "--merged-coco", default=None, help="optional path to also write the merged/de-duplicated COCO json"
+    )
     args = ap.parse_args()
 
     coco = load_coco(args.coco_json)
+
+    if args.merged_coco is not None:
+        with open(args.merged_coco, "w", encoding="utf-8") as f:
+            json.dump(coco, f, ensure_ascii=False, indent=2)
+        print(
+            f"Wrote merged COCO: {len(coco['images'])} images, "
+            f"{len(coco['annotations'])} annotations, "
+            f"{len(coco['categories'])} categories -> {args.merged_coco}"
+        )
 
     if args.images_dir is not None:
         report_missing_images(coco, args.images_dir)
