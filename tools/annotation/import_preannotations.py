@@ -59,9 +59,9 @@ dotenv.load_dotenv(dotenv_path=Path.cwd().joinpath(".env"))
 </View>
 """
 
-LABEL_STUDIO_URL = os.getenv("LABEL_STUDIO_URL", "http://localhost:8080")
+LABEL_STUDIO_URL = os.getenv("LABEL_STUDIO_URL", "http://localhost:80")
 LABEL_STUDIO_API_KEY = os.getenv("LABEL_STUDIO_API_KEY")
-LABEL_STUDIO_PROJECT_ID = int(os.getenv("LABEL_STUDIO_PROJECT_ID", "0"))
+LABEL_STUDIO_PROJECT_ID = int(os.getenv("LABEL_STUDIO_PROJECT_ID", "7"))
 
 
 FROM_NAME = os.getenv("LABEL_STUDIO_FROM_NAME", "label")
@@ -71,6 +71,8 @@ DATA_IMAGE_KEY = os.getenv("LABEL_STUDIO_DATA_IMAGE_KEY", "image")
 # Prediction controls
 SCORE_THRESHOLD = float(os.getenv("SCORE_THRESHOLD", "0.25"))
 MODEL_VERSION = os.getenv("MODEL_VERSION", "prelabel_v1")
+
+ANNOTATION_ROOT_DIR = Path("../data/annotations")
 
 
 def load_json(path: Path) -> Any:
@@ -153,10 +155,37 @@ def build_result_item(
     }
 
 
-def main(split: Literal["train", "val", "test"]) -> None:
+def delete_all_predictions(ls: LabelStudio, project_id: int) -> int:
+    """Delete every existing prediction in the project, return the count deleted."""
+    old_preds = ls.predictions.list(project=project_id)
+    for pred in old_preds:
+        ls.predictions.delete(id=pred.id)
+    return len(old_preds)
+
+
+def delete_tracked_annotations(ls: LabelStudio, track_file: Path) -> int:
+    """Delete annotations created by a previous run of this script.
+
+    Annotations have no model_version field, so we track the ids we create in a
+    local json file and remove them before re-importing to stay idempotent.
+    """
+    if not track_file.exists():
+        return 0
+    ann_ids = load_json(track_file)
+    deleted = 0
+    for ann_id in ann_ids:
+        try:
+            ls.annotations.delete(id=ann_id)
+            deleted += 1
+        except Exception:
+            pass  # already deleted manually in the UI
+    return deleted
+
+
+def main(split: Literal["train", "val", "test", "all"]) -> None:
     # Input files
-    coco_gt_json = Path(f"./annotations/{split}_coco.json")
-    coco_pred_json = Path(f"./annotations/{split}_pred.json")
+    coco_gt_json = Path(ANNOTATION_ROOT_DIR, f"{split}_coco.json").resolve()
+    coco_pred_json = Path(ANNOTATION_ROOT_DIR, f"{split}_preds.json").resolve()
 
     if not LABEL_STUDIO_API_KEY:
         raise ValueError("LABEL_STUDIO_API_KEY is not set.")
@@ -204,6 +233,16 @@ def main(split: Literal["train", "val", "test"]) -> None:
     ls = LabelStudio(base_url=LABEL_STUDIO_URL, api_key=LABEL_STUDIO_API_KEY)
     project = ls.projects.get(id=LABEL_STUDIO_PROJECT_ID)
 
+    # Remove stale predictions left over from when this script imported predictions.
+    deleted_preds = delete_all_predictions(ls, project.id)
+    print(f"Deleted {deleted_preds} old prediction(s) from project '{project.title}' (id={project.id})")
+
+    # Remove annotations imported by a previous run of this script (tracked locally),
+    # so re-running replaces them instead of stacking duplicates.
+    track_file = Path(ANNOTATION_ROOT_DIR, f"{split}_imported_annotation_ids.json").resolve()
+    deleted_anns = delete_tracked_annotations(ls, track_file)
+    print(f"Deleted {deleted_anns} previously imported annotation(s)")
+
     tasks = list(ls.tasks.list(project=project.id, fields="all"))
     print(f"Loaded {len(tasks)} tasks from project '{project.title}' (id={project.id})")
 
@@ -219,6 +258,7 @@ def main(split: Literal["train", "val", "test"]) -> None:
     created = 0
     skipped_no_task = 0
     skipped_no_preds = 0
+    created_ann_ids: list[int] = []
 
     for image_id, image_info in image_info_by_id.items():
         file_name = image_info["file_name"]
@@ -236,7 +276,6 @@ def main(split: Literal["train", "val", "test"]) -> None:
             continue
 
         result: list[dict[str, Any]] = []
-        task_scores: list[float] = []
 
         for pred in preds:
             category_id = int(pred["category_id"])
@@ -255,27 +294,32 @@ def main(split: Literal["train", "val", "test"]) -> None:
                 continue
 
             result.append(item)
-            task_scores.append(float(pred.get("score", 0.0)))
 
         if not result:
             continue
 
-        task_score = max(task_scores) if task_scores else None
-
-        ls.predictions.create(
+        # Import as a regular annotation (not a prediction) so it shows up
+        # alongside the existing manual annotation in the labeling UI.
+        ann = ls.annotations.create(
+            id=task.id,
             task=task.id,
+            project=project.id,
             result=result,
-            score=task_score,
-            model_version=MODEL_VERSION,
+            ground_truth=False,
+            was_cancelled=False,
         )
+        created_ann_ids.append(int(ann.id))
         created += 1
 
-    ls.projects.update(id=project.id, model_version=MODEL_VERSION)
+    # Persist the ids so the next run can replace these annotations.
+    with track_file.open("w", encoding="utf-8") as f:
+        json.dump(created_ann_ids, f)
 
-    print(f"Done. Predictions created for {created} tasks.")
+    print(f"Done. Annotations created for {created} tasks.")
     print(f"Skipped (no matching LS task): {skipped_no_task}")
     print(f"Skipped (task exists but no predictions): {skipped_no_preds}")
+    print(f"Imported annotation ids tracked in {track_file}")
 
 
 if __name__ == "__main__":
-    main(split="val")
+    main(split="all")
