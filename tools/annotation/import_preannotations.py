@@ -28,7 +28,7 @@ dotenv.load_dotenv(dotenv_path=Path.cwd().joinpath(".env"))
   <!-- Attribute 1 -->
   <View className="row">
     <Header value="Wake Intensity" size="5"/>
-    <Choices name="wake_intensity" toName="image" perRegion="true" required="true" choice="single" showInline="true">
+    <Choices name="wake_intensity" toName="image" perRegion="true" required="false" choice="single" showInline="true">
       <Choice value="none" hint="no visible wake"/>
       <Choice value="weak" hint="visible but not distinct"/>
       <Choice value="moderate" hint="clear but not long"/>
@@ -39,7 +39,7 @@ dotenv.load_dotenv(dotenv_path=Path.cwd().joinpath(".env"))
   <!-- Attribute 2 -->
   <View className="row">
     <Header value="Boat Length" size="5"/>
-    <Choices name="length_range" toName="image" perRegion="true" required="true" choice="single" showInline="true">
+    <Choices name="length_range" toName="image" perRegion="true" required="false" choice="single" showInline="true">
       <Choice value="&lt;5m"/>
       <Choice value="5m-8m"/>
       <Choice value="8m-10m"/>
@@ -51,7 +51,8 @@ dotenv.load_dotenv(dotenv_path=Path.cwd().joinpath(".env"))
   </View>
 
   <RectangleLabels name="label" toName="image" snap="pixel">
-    <Label value="ship" background="red" selected="true"/>
+    <Label value="ship" background="red" selected="false"/>
+    <Label value="ship-pred" background="green" selected="false"/>
   </RectangleLabels>
 
   <Image name="image" value="$image" smoothing="false" zoom="true" zoomControl="true"/>
