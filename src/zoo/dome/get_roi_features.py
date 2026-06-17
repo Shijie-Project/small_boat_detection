@@ -210,7 +210,11 @@ class WindowProcessor(nn.Module):
 
         B, C, H, W = backbone_memory.shape
 
-        assert H % window_size == 0 and W % window_size == 0, "H and W must be divisible by window_size"
+        try:
+            assert H % window_size == 0 and W % window_size == 0
+        except AssertionError as e:
+            print(f"H and W must be divisible by window_size, but got H: {H}, W: {W}, window_size: {window_size}")
+            raise e
 
         num_win_h = H // window_size
         num_win_w = W // window_size
