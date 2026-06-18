@@ -17,7 +17,7 @@ def process_file(split: SplitType) -> None:
     """
     assert split in ["train", "val", "test", "all"]
 
-    input_file = f"./annotations/{split}_coco.json"
+    input_file = f"../data/annotations/{split}_coco.json"
 
     try:
         with open(input_file, encoding="utf-8") as f:
@@ -48,4 +48,4 @@ def process_file(split: SplitType) -> None:
 
 
 if __name__ == "__main__":
-    process_file(split="val")
+    process_file(split="all")
