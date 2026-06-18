@@ -1,7 +1,27 @@
+"""
+Sync COCO detector predictions into a Label Studio project for hand-correction.
+
+Predictions are imported as green ``ship-pred`` boxes that sit in the SAME
+annotation as the manual red ``ship`` ground-truth (GT) boxes, so you can see
+where the model and the annotator disagree and nudge the GT accordingly.
+
+Three modes (see ``--help``):
+
+  (default)    import every prediction above ``SCORE_THRESHOLD``.
+  --add-pred   import ONLY predictions that disagree with GT, i.e. whose best
+               IoU with any GT box in the same image is below ``--iou-threshold``.
+  --clean      remove every imported ``ship-pred`` box and prediction object,
+               leaving the GT ``ship`` boxes untouched.
+
+Run it from a directory that contains a ``.env`` with the ``LABEL_STUDIO_*``
+settings. COCO files are read from ``<ANNOTATION_ROOT_DIR>/{split}_coco.json``
+(GT) and ``<ANNOTATION_ROOT_DIR>/{split}_preds.json`` (predictions).
+"""
+
+import argparse
 import json
 import os
 import uuid
-import warnings
 from collections import defaultdict
 from pathlib import Path
 from typing import Any, Literal
@@ -11,137 +31,104 @@ import dotenv
 from label_studio_sdk import LabelStudio
 
 
+# --------------------------------------------------------------------------- #
+# Configuration (read once from the environment / .env)
+# --------------------------------------------------------------------------- #
 dotenv.load_dotenv(dotenv_path=Path.cwd().joinpath(".env"))
-
-# Label Studio config.
-"""
-<View>
-  <style>
-    .row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 3px;
-    }
-  </style>
-
-  <!-- Attribute 1 -->
-  <View className="row">
-    <Header value="Wake Intensity" size="5"/>
-    <Choices name="wake_intensity" toName="image" perRegion="true" required="false" choice="single" showInline="true">
-      <Choice value="none" hint="no visible wake"/>
-      <Choice value="weak" hint="visible but not distinct"/>
-      <Choice value="moderate" hint="clear but not long"/>
-      <Choice value="strong" hint="very distinct and/or long"/>
-    </Choices>
-  </View>
-
-  <!-- Attribute 2 -->
-  <View className="row">
-    <Header value="Boat Length" size="5"/>
-    <Choices name="length_range" toName="image" perRegion="true" required="false" choice="single" showInline="true">
-      <Choice value="&lt;5m"/>
-      <Choice value="5m-8m"/>
-      <Choice value="8m-10m"/>
-      <Choice value="10m-12m"/>
-      <Choice value="12m-15m"/>
-      <Choice value="15m-20m"/>
-      <Choice value="&gt;20m"/>
-    </Choices>
-  </View>
-
-  <RectangleLabels name="label" toName="image" snap="pixel">
-    <Label value="ship" background="red" selected="false"/>
-    <Label value="ship-pred" background="green" selected="false"/>
-  </RectangleLabels>
-
-  <Image name="image" value="$image" smoothing="false" zoom="true" zoomControl="true"/>
-
-</View>
-"""
 
 LABEL_STUDIO_URL = os.getenv("LABEL_STUDIO_URL", "http://localhost:80")
 LABEL_STUDIO_API_KEY = os.getenv("LABEL_STUDIO_API_KEY")
 LABEL_STUDIO_PROJECT_ID = int(os.getenv("LABEL_STUDIO_PROJECT_ID", "9"))
 
-
+# Names of the controls in the Label Studio labeling config.
 FROM_NAME = os.getenv("LABEL_STUDIO_FROM_NAME", "label")
 TO_NAME = os.getenv("LABEL_STUDIO_TO_NAME", "image")
 DATA_IMAGE_KEY = os.getenv("LABEL_STUDIO_DATA_IMAGE_KEY", "image")
 
-# Prediction controls
+# Only import predictions with score >= this.
 SCORE_THRESHOLD = float(os.getenv("SCORE_THRESHOLD", "0.25"))
+# --add-pred: a prediction "disagrees" with GT when its best IoU is below this.
+IOU_MATCH_THRESHOLD = float(os.getenv("IOU_MATCH_THRESHOLD", "0.5"))
 
 ANNOTATION_ROOT_DIR = Path("../data/annotations")
+DEFAULT_IMAGE_SIZE = 1024  # fallback when a COCO image lacks width/height
+
+# RectangleLabels used in the Label Studio project. GT boxes are `ship`,
+# imported predictions are `ship-pred`. Must match the labeling config XML.
+GT_LABEL = "ship"
+PRED_LABEL = "ship-pred"
 
 
+# --------------------------------------------------------------------------- #
+# Generic helpers
+# --------------------------------------------------------------------------- #
 def load_json(path: Path) -> Any:
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
+def coco_path(split: str, kind: Literal["coco", "preds"]) -> Path:
+    """Path to the GT (`coco`) or prediction (`preds`) file for a split."""
+    return Path(ANNOTATION_ROOT_DIR, f"{split}_{kind}.json").resolve()
+
+
+def get_field(obj: Any, key: str, default: Any = None) -> Any:
+    """Read a field from either a dict or an SDK object."""
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
 def basename_from_ls_path(path_or_url: str) -> str:
+    """Extract the image file name from a Label Studio data path or URL."""
     parsed = urlparse(path_or_url)
     query = parse_qs(parsed.query)
-
-    if "d" in query and query["d"]:
+    if query.get("d"):
         return Path(unquote(query["d"][0])).name
-
     return Path(unquote(parsed.path)).name
 
 
-def clamp(value: float, low: float, high: float) -> float:
-    return max(low, min(high, value))
+# --------------------------------------------------------------------------- #
+# Geometry: IoU and COCO -> Label Studio box conversion
+# --------------------------------------------------------------------------- #
+def bbox_iou(a_xywh: list[float], b_xywh: list[float]) -> float:
+    """IoU of two COCO ``[x, y, w, h]`` pixel boxes."""
+    ax, ay, aw, ah = a_xywh
+    bx, by, bw, bh = b_xywh
+    inter_w = max(0.0, min(ax + aw, bx + bw) - max(ax, bx))
+    inter_h = max(0.0, min(ay + ah, by + bh) - max(ay, by))
+    inter = inter_w * inter_h
+    if inter <= 0:
+        return 0.0
+    union = aw * ah + bw * bh - inter
+    return inter / union if union > 0 else 0.0
 
 
-def coco_bbox_to_ls_percent(
+def best_iou_with_gt(pred_bbox: list[float], gt_bboxes: list[list[float]]) -> float:
+    """Highest IoU between a prediction box and any GT box (0 if there are none)."""
+    return max((bbox_iou(pred_bbox, g) for g in gt_bboxes), default=0.0)
+
+
+def coco_box_to_region(
     bbox_xywh: list[float],
-    image_width: int | float,
-    image_height: int | float,
-) -> dict[str, float] | None:
+    image_width: int,
+    image_height: int,
+) -> dict[str, Any] | None:
     """
-    Convert COCO bbox [x, y, w, h] in pixels
-    to Label Studio percentage bbox.
+    Convert a COCO ``[x, y, w, h]`` pixel box into a Label Studio ``ship-pred``
+    rectangle region, clamped to the image. Returns None for degenerate boxes.
     """
     x, y, w, h = map(float, bbox_xywh)
-
     if w <= 0 or h <= 0:
         return None
 
-    x1 = clamp(x, 0.0, float(image_width))
-    y1 = clamp(y, 0.0, float(image_height))
-    x2 = clamp(x + w, 0.0, float(image_width))
-    y2 = clamp(y + h, 0.0, float(image_height))
-
-    new_w = x2 - x1
-    new_h = y2 - y1
+    x1 = min(max(x, 0.0), float(image_width))
+    y1 = min(max(y, 0.0), float(image_height))
+    x2 = min(max(x + w, 0.0), float(image_width))
+    y2 = min(max(y + h, 0.0), float(image_height))
+    new_w, new_h = x2 - x1, y2 - y1
     if new_w <= 0 or new_h <= 0:
         return None
-
-    return {
-        "x": 100.0 * x1 / float(image_width),
-        "y": 100.0 * y1 / float(image_height),
-        "width": 100.0 * new_w / float(image_width),
-        "height": 100.0 * new_h / float(image_height),
-        "rotation": 0,
-    }
-
-
-def build_result_item(
-    label_name: str,
-    image_width: int,
-    image_height: int,
-    bbox_xywh: list[float],
-) -> dict[str, Any] | None:
-    value = coco_bbox_to_ls_percent(
-        bbox_xywh=bbox_xywh,
-        image_width=image_width,
-        image_height=image_height,
-    )
-    if value is None:
-        return None
-
-    value["rectanglelabels"] = [label_name]
 
     return {
         "id": uuid.uuid4().hex[:10],
@@ -151,159 +138,277 @@ def build_result_item(
         "original_width": image_width,
         "original_height": image_height,
         "image_rotation": 0,
-        "value": value,
+        "value": {
+            "x": 100.0 * x1 / image_width,
+            "y": 100.0 * y1 / image_height,
+            "width": 100.0 * new_w / image_width,
+            "height": 100.0 * new_h / image_height,
+            "rotation": 0,
+            "rectanglelabels": [PRED_LABEL],
+        },
     }
 
 
-def _get(obj: Any, key: str, default: Any = None) -> Any:
-    """Read a field from either a dict or an object."""
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    return getattr(obj, key, default)
-
-
-def region_is_ship_pred(item: Any) -> bool:
-    """True if a single annotation result region is a `ship-pred` rectangle."""
-    if _get(item, "type") != "rectanglelabels":
+# --------------------------------------------------------------------------- #
+# `ship-pred` region bookkeeping inside an annotation's result list
+# --------------------------------------------------------------------------- #
+def is_pred_region(region: Any) -> bool:
+    """True if a single annotation result region is a ``ship-pred`` rectangle."""
+    if get_field(region, "type") != "rectanglelabels":
         return False
-    value = _get(item, "value", {}) or {}
-    return "ship-pred" in (_get(value, "rectanglelabels", []) or [])
+    value = get_field(region, "value", {}) or {}
+    return PRED_LABEL in (get_field(value, "rectanglelabels", []) or [])
 
 
-def strip_ship_pred_regions(result: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Drop previously imported `ship-pred` regions, keep everything else (e.g. manual `ship`)."""
-    return [r for r in result if not region_is_ship_pred(r)]
+def without_pred_regions(regions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop imported ``ship-pred`` regions, keep everything else (e.g. GT ``ship``)."""
+    return [r for r in regions if not is_pred_region(r)]
 
 
-def main(split: Literal["train", "val", "test", "all"]) -> None:
-    # Input files
-    coco_gt_json = Path(ANNOTATION_ROOT_DIR, f"{split}_coco.json").resolve()
-    coco_pred_json = Path(ANNOTATION_ROOT_DIR, f"{split}_preds.json").resolve()
+# --------------------------------------------------------------------------- #
+# COCO loaders (build the per-image lookups used during the sync)
+# --------------------------------------------------------------------------- #
+def index_image_info(coco_gt: dict[str, Any]) -> dict[int, dict[str, Any]]:
+    """image_id -> {file_name, width, height} from the GT file."""
+    info: dict[int, dict[str, Any]] = {}
+    for img in coco_gt.get("images", []):
+        info[int(img["id"])] = {
+            "file_name": img["file_name"],
+            "width": int(img.get("width") or DEFAULT_IMAGE_SIZE),
+            "height": int(img.get("height") or DEFAULT_IMAGE_SIZE),
+        }
+    return info
 
+
+def index_gt_boxes(coco_gt: dict[str, Any]) -> dict[int, list[list[float]]]:
+    """image_id -> list of GT ``[x, y, w, h]`` boxes (for IoU matching)."""
+    boxes: dict[int, list[list[float]]] = defaultdict(list)
+    for ann in coco_gt.get("annotations", []):
+        if "image_id" in ann and "bbox" in ann:
+            boxes[int(ann["image_id"])].append([float(v) for v in ann["bbox"]])
+    return boxes
+
+
+def index_predictions(
+    coco_preds: list[dict[str, Any]],
+    score_threshold: float,
+) -> dict[int, list[dict[str, Any]]]:
+    """image_id -> list of predictions scoring at or above ``score_threshold``."""
+    preds: dict[int, list[dict[str, Any]]] = defaultdict(list)
+    for pred in coco_preds:
+        if float(pred.get("score", 0.0)) < score_threshold:
+            continue
+        if "image_id" in pred and "bbox" in pred:
+            preds[int(pred["image_id"])].append(pred)
+    return preds
+
+
+def select_pred_regions(
+    preds: list[dict[str, Any]],
+    gt_boxes: list[list[float]],
+    image_width: int,
+    image_height: int,
+    iou_threshold: float | None,
+) -> list[dict[str, Any]]:
+    """
+    Turn one image's predictions into ``ship-pred`` regions.
+
+    When ``iou_threshold`` is set (--add-pred), keep only predictions that
+    disagree with GT (best IoU below the threshold); otherwise keep all.
+    """
+    regions: list[dict[str, Any]] = []
+    for pred in preds:
+        if iou_threshold is not None and best_iou_with_gt(pred["bbox"], gt_boxes) >= iou_threshold:
+            continue
+        region = coco_box_to_region(pred["bbox"], image_width, image_height)
+        if region is not None:
+            regions.append(region)
+    return regions
+
+
+# --------------------------------------------------------------------------- #
+# Label Studio access
+# --------------------------------------------------------------------------- #
+def connect_label_studio() -> LabelStudio:
+    """Create a Label Studio client, validating the required settings."""
     if not LABEL_STUDIO_API_KEY:
         raise ValueError("LABEL_STUDIO_API_KEY is not set.")
     if LABEL_STUDIO_PROJECT_ID <= 0:
         raise ValueError("LABEL_STUDIO_PROJECT_ID must be set to a valid project id.")
+    return LabelStudio(base_url=LABEL_STUDIO_URL, api_key=LABEL_STUDIO_API_KEY)
 
-    coco_gt = load_json(coco_gt_json)
-    coco_preds = load_json(coco_pred_json)
 
-    images = coco_gt.get("images", [])
-    categories = coco_gt.get("categories", [])
-
-    image_info_by_id: dict[int, dict[str, Any]] = {}
-    for img in images:
-        try:
-            image_info_by_id[int(img["id"])] = {
-                "file_name": img["file_name"],
-                "width": int(img["width"]),
-                "height": int(img["height"]),
-            }
-        except TypeError:
-            warnings.warn(
-                f"Image ID {img.get('id')} ('{img.get('file_name')}') has missing or invalid "
-                f"width/height values. Defaulting to 1024x1024.",
-                UserWarning,
-                stacklevel=2,
-            )
-            image_info_by_id[int(img["id"])] = {
-                "file_name": img["file_name"],
-                "width": 1024,
-                "height": 1024,
-            }
-
-    category_name_by_id = {int(cat["id"]): str(cat["name"]) for cat in categories}
-
-    preds_by_image_id: dict[int, list[dict[str, Any]]] = defaultdict(list)
-    for pred in coco_preds:
-        score = float(pred.get("score", 0.0))
-        if score < SCORE_THRESHOLD:
-            continue
-        if "image_id" not in pred or "bbox" not in pred:
-            continue
-        preds_by_image_id[int(pred["image_id"])].append(pred)
-
-    ls = LabelStudio(base_url=LABEL_STUDIO_URL, api_key=LABEL_STUDIO_API_KEY)
+def fetch_tasks(ls: LabelStudio) -> list[Any]:
+    """Load every task (with annotations/predictions) for the configured project."""
     project = ls.projects.get(id=LABEL_STUDIO_PROJECT_ID)
-
     tasks = list(ls.tasks.list(project=project.id, fields="all"))
     print(f"Loaded {len(tasks)} tasks from project '{project.title}' (id={project.id})")
+    return tasks
 
-    # Build mapping: LS task image basename -> task
-    task_by_image_basename: dict[str, Any] = {}
+
+def index_tasks_by_basename(tasks: list[Any]) -> dict[str, Any]:
+    """image file name -> task, so COCO images can be matched to LS tasks."""
+    by_basename: dict[str, Any] = {}
     for task in tasks:
-        task_data = getattr(task, "data", {}) or {}
-        image_ref = task_data.get(DATA_IMAGE_KEY)
-        if not image_ref:
-            continue
-        task_by_image_basename[basename_from_ls_path(str(image_ref))] = task
+        data = getattr(task, "data", {}) or {}
+        image_ref = data.get(DATA_IMAGE_KEY)
+        if image_ref:
+            by_basename[basename_from_ls_path(str(image_ref))] = task
+    return by_basename
 
-    updated = 0
-    created = 0
-    skipped_no_task = 0
-    skipped_no_preds = 0
 
-    for image_id, image_info in image_info_by_id.items():
-        file_name = image_info["file_name"]
-        image_width = image_info["width"]
-        image_height = image_info["height"]
+def upsert_pred_regions(ls: LabelStudio, task: Any, regions: list[dict[str, Any]]) -> str:
+    """
+    Write ``regions`` into the task's first annotation, replacing any previously
+    imported ``ship-pred`` boxes while keeping the GT ``ship`` boxes. If the task
+    has no annotation yet, create one. Returns "updated" or "created".
+    """
+    annotations = get_field(task, "annotations", []) or []
+    target = annotations[0] if annotations else None
 
-        task = task_by_image_basename.get(Path(file_name).name)
+    if target is not None:
+        existing = list(get_field(target, "result", []) or [])
+        merged = without_pred_regions(existing) + regions
+        ls.annotations.update(id=int(get_field(target, "id")), result=merged)
+        return "updated"
+
+    ls.annotations.create(id=int(get_field(task, "id")), result=regions)
+    return "created"
+
+
+# --------------------------------------------------------------------------- #
+# Modes
+# --------------------------------------------------------------------------- #
+def import_predictions(
+    split: Literal["train", "val", "test", "all"],
+    iou_threshold: float | None = None,
+) -> None:
+    """
+    Import predictions as ``ship-pred`` boxes alongside the GT.
+
+    ``iou_threshold=None`` imports every prediction above ``SCORE_THRESHOLD``.
+    A value (the --add-pred mode) keeps only predictions that disagree with GT.
+    """
+    coco_gt = load_json(coco_path(split, "coco"))
+    coco_preds = load_json(coco_path(split, "preds"))
+
+    image_info = index_image_info(coco_gt)
+    gt_boxes_by_image = index_gt_boxes(coco_gt)
+    preds_by_image = index_predictions(coco_preds, SCORE_THRESHOLD)
+
+    ls = connect_label_studio()
+    task_by_basename = index_tasks_by_basename(fetch_tasks(ls))
+
+    updated = created = kept_regions = 0
+    skipped_no_task = skipped_no_preds = 0
+
+    for image_id, info in image_info.items():
+        task = task_by_basename.get(Path(info["file_name"]).name)
         if task is None:
             skipped_no_task += 1
             continue
 
-        preds = preds_by_image_id.get(image_id, [])
+        preds = preds_by_image.get(image_id, [])
         if not preds:
             skipped_no_preds += 1
             continue
 
-        result: list[dict[str, Any]] = []
-
-        for pred in preds:
-            category_id = int(pred["category_id"])
-            label_name = category_name_by_id.get(category_id)
-            if label_name is None:
-                continue
-
-            label_name = "ship-pred"  # we manually set the label name to `ship-pred` here
-            item = build_result_item(
-                label_name=label_name,
-                image_width=image_width,
-                image_height=image_height,
-                bbox_xywh=pred["bbox"],
-            )
-            if item is None:
-                continue
-
-            result.append(item)
-
-        if not result:
+        regions = select_pred_regions(
+            preds=preds,
+            gt_boxes=gt_boxes_by_image.get(image_id, []),
+            image_width=info["width"],
+            image_height=info["height"],
+            iou_threshold=iou_threshold,
+        )
+        if not regions:
             continue
 
-        # Merge the `ship-pred` boxes into the image's existing annotation so a
-        # single annotation carries BOTH the manual `ship` boxes and the model's
-        # `ship-pred` boxes (overlapping), making prediction-vs-annotation
-        # differences visible in one view. On re-run, stale `ship-pred` regions
-        # are stripped first and replaced with the fresh predictions, while the
-        # manual `ship` boxes are preserved.
-        annotations = _get(task, "annotations", []) or []
-        target = annotations[0] if annotations else None
+        action = upsert_pred_regions(ls, task, regions)
+        updated += action == "updated"
+        created += action == "created"
+        kept_regions += len(regions)
 
-        if target is not None:
-            existing = list(_get(target, "result", []) or [])
-            merged = strip_ship_pred_regions(existing) + result
-            ls.annotations.update(id=int(_get(target, "id")), result=merged)
-            updated += 1
-        else:
-            # No manual annotation exists yet -> create one holding just the predictions.
-            ls.annotations.create(id=task.id, result=result)
-            created += 1
-
-    print(f"Done. Updated {updated} existing annotation(s) and created {created} new one(s) with 'ship-pred' boxes.")
+    print(f"Done. Updated {updated} and created {created} annotation(s) with '{PRED_LABEL}' boxes.")
+    if iou_threshold is not None:
+        print(f"--add-pred: kept {kept_regions} prediction(s) with best IoU < {iou_threshold} vs GT.")
     print(f"Skipped (no matching LS task): {skipped_no_task}")
     print(f"Skipped (task exists but no predictions): {skipped_no_preds}")
 
 
+def clean() -> None:
+    """
+    Reset the project to GT only.
+
+    Removes every imported ``ship-pred`` region and all Label Studio prediction
+    objects, preserving the manual ``ship`` boxes and their per-region
+    attributes. An annotation left empty (it only held predictions) is deleted.
+    """
+    ls = connect_label_studio()
+    tasks = fetch_tasks(ls)
+
+    annotations_updated = annotations_deleted = predictions_deleted = 0
+
+    for task in tasks:
+        for ann in get_field(task, "annotations", []) or []:
+            existing = list(get_field(ann, "result", []) or [])
+            kept = without_pred_regions(existing)
+            if len(kept) == len(existing):
+                continue  # nothing to strip
+
+            ann_id = int(get_field(ann, "id"))
+            if kept:
+                ls.annotations.update(id=ann_id, result=kept)
+                annotations_updated += 1
+            else:
+                ls.annotations.delete(id=ann_id)
+                annotations_deleted += 1
+
+        for pred in get_field(task, "predictions", []) or []:
+            pred_id = get_field(pred, "id")
+            if pred_id is not None:
+                ls.predictions.delete(id=int(pred_id))
+                predictions_deleted += 1
+
+    print(
+        f"Clean done. Stripped '{PRED_LABEL}' from {annotations_updated} annotation(s), "
+        f"deleted {annotations_deleted} prediction-only annotation(s) and "
+        f"{predictions_deleted} prediction object(s). GT '{GT_LABEL}' boxes preserved."
+    )
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument(
+        "--split",
+        choices=["train", "val", "test", "all"],
+        default="all",
+        help="Which split's COCO files to use (ignored with --clean). Default: all.",
+    )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help=f"Delete every '{PRED_LABEL}' region and prediction object, keeping only GT '{GT_LABEL}' boxes.",
+    )
+    parser.add_argument(
+        "--add-pred",
+        action="store_true",
+        help="Import only predictions that disagree with GT (best IoU < --iou-threshold).",
+    )
+    parser.add_argument(
+        "--iou-threshold",
+        type=float,
+        default=IOU_MATCH_THRESHOLD,
+        help=f"IoU below which a prediction counts as disagreeing with GT (--add-pred only). "
+        f"Default: {IOU_MATCH_THRESHOLD}.",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    main(split="all")
+    args = parse_args()
+    if args.clean:
+        clean()
+    elif args.add_pred:
+        import_predictions(split=args.split, iou_threshold=args.iou_threshold)
+    else:
+        import_predictions(split=args.split)
