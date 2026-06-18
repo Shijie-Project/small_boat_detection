@@ -38,7 +38,7 @@ dotenv.load_dotenv(dotenv_path=Path.cwd().joinpath(".env"))
 
 LABEL_STUDIO_URL = os.getenv("LABEL_STUDIO_URL", "http://localhost:80")
 LABEL_STUDIO_API_KEY = os.getenv("LABEL_STUDIO_API_KEY")
-LABEL_STUDIO_PROJECT_ID = int(os.getenv("LABEL_STUDIO_PROJECT_ID", "9"))
+LABEL_STUDIO_PROJECT_ID = int(os.getenv("LABEL_STUDIO_PROJECT_ID", "7"))
 
 # Names of the controls in the Label Studio labeling config.
 FROM_NAME = os.getenv("LABEL_STUDIO_FROM_NAME", "label")
@@ -48,15 +48,20 @@ DATA_IMAGE_KEY = os.getenv("LABEL_STUDIO_DATA_IMAGE_KEY", "image")
 # Only import predictions with score >= this.
 SCORE_THRESHOLD = float(os.getenv("SCORE_THRESHOLD", "0.25"))
 # --add-pred: a prediction "disagrees" with GT when its best IoU is below this.
-IOU_MATCH_THRESHOLD = float(os.getenv("IOU_MATCH_THRESHOLD", "0.5"))
+IOU_MATCH_THRESHOLD = float(os.getenv("IOU_MATCH_THRESHOLD", "0.75"))
 
 ANNOTATION_ROOT_DIR = Path("../data/annotations")
 DEFAULT_IMAGE_SIZE = 1024  # fallback when a COCO image lacks width/height
 
-# RectangleLabels used in the Label Studio project. GT boxes are `ship`,
-# imported predictions are `ship-pred`. Must match the labeling config XML.
+# RectangleLabels used in the Label Studio project. Must match the labeling
+# config XML. GT boxes are manually drawn `ship`; the importer adds two review
+# overlays that get stripped/refreshed on every run:
+#   * `ship-pred` — a prediction that disagrees with GT.
+#   * `ship-gt`   — a GT box the model misses entirely (hard to detect).
 GT_LABEL = "ship"
 PRED_LABEL = "ship-pred"
+GT_HARD_LABEL = "ship-gt"
+IMPORTED_LABELS = {PRED_LABEL, GT_HARD_LABEL}  # labels this script owns/refreshes
 
 
 # --------------------------------------------------------------------------- #
@@ -104,19 +109,20 @@ def bbox_iou(a_xywh: list[float], b_xywh: list[float]) -> float:
     return inter / union if union > 0 else 0.0
 
 
-def best_iou_with_gt(pred_bbox: list[float], gt_bboxes: list[list[float]]) -> float:
-    """Highest IoU between a prediction box and any GT box (0 if there are none)."""
-    return max((bbox_iou(pred_bbox, g) for g in gt_bboxes), default=0.0)
+def max_iou(box: list[float], others: list[list[float]]) -> float:
+    """Highest IoU between ``box`` and any box in ``others`` (0 if empty)."""
+    return max((bbox_iou(box, o) for o in others), default=0.0)
 
 
 def coco_box_to_region(
     bbox_xywh: list[float],
     image_width: int,
     image_height: int,
+    label: str,
 ) -> dict[str, Any] | None:
     """
-    Convert a COCO ``[x, y, w, h]`` pixel box into a Label Studio ``ship-pred``
-    rectangle region, clamped to the image. Returns None for degenerate boxes.
+    Convert a COCO ``[x, y, w, h]`` pixel box into a Label Studio rectangle
+    region with ``label``, clamped to the image. Returns None for degenerate boxes.
     """
     x, y, w, h = map(float, bbox_xywh)
     if w <= 0 or h <= 0:
@@ -144,25 +150,26 @@ def coco_box_to_region(
             "width": 100.0 * new_w / image_width,
             "height": 100.0 * new_h / image_height,
             "rotation": 0,
-            "rectanglelabels": [PRED_LABEL],
+            "rectanglelabels": [label],
         },
     }
 
 
 # --------------------------------------------------------------------------- #
-# `ship-pred` region bookkeeping inside an annotation's result list
+# Imported-region bookkeeping inside an annotation's result list
 # --------------------------------------------------------------------------- #
-def is_pred_region(region: Any) -> bool:
-    """True if a single annotation result region is a ``ship-pred`` rectangle."""
+def is_imported_region(region: Any) -> bool:
+    """True if a region is one this script owns (``ship-pred`` or ``ship-gt``)."""
     if get_field(region, "type") != "rectanglelabels":
         return False
     value = get_field(region, "value", {}) or {}
-    return PRED_LABEL in (get_field(value, "rectanglelabels", []) or [])
+    labels = get_field(value, "rectanglelabels", []) or []
+    return any(label in IMPORTED_LABELS for label in labels)
 
 
-def without_pred_regions(regions: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Drop imported ``ship-pred`` regions, keep everything else (e.g. GT ``ship``)."""
-    return [r for r in regions if not is_pred_region(r)]
+def without_imported_regions(regions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop imported ``ship-pred``/``ship-gt`` regions, keep manual ones (GT ``ship``)."""
+    return [r for r in regions if not is_imported_region(r)]
 
 
 # --------------------------------------------------------------------------- #
@@ -203,7 +210,7 @@ def index_predictions(
     return preds
 
 
-def select_pred_regions(
+def build_review_regions(
     preds: list[dict[str, Any]],
     gt_boxes: list[list[float]],
     image_width: int,
@@ -211,18 +218,38 @@ def select_pred_regions(
     iou_threshold: float | None,
 ) -> list[dict[str, Any]]:
     """
-    Turn one image's predictions into ``ship-pred`` regions.
+    Build the review boxes to merge into one image's annotation.
 
-    When ``iou_threshold`` is set (--add-pred), keep only predictions that
-    disagree with GT (best IoU below the threshold); otherwise keep all.
+    Predictions -> ``ship-pred`` regions:
+      * ``iou_threshold is None`` (plain import): every prediction is shown.
+      * ``iou_threshold`` set (--add-pred): only predictions that disagree with
+        GT, i.e. whose best IoU with any GT box is below the threshold.
+
+    GT -> ``ship-gt`` regions (only in --add-pred): every GT box that NO
+    prediction overlaps at all (best IoU with the predictions is 0). These are
+    boxes the model misses entirely and are hard to detect, so the GT box itself
+    is highlighted for review.
     """
     regions: list[dict[str, Any]] = []
+
+    # Predictions that disagree with (or, in plain import, all) GT.
     for pred in preds:
-        if iou_threshold is not None and best_iou_with_gt(pred["bbox"], gt_boxes) >= iou_threshold:
+        if iou_threshold is not None and max_iou(pred["bbox"], gt_boxes) >= iou_threshold:
             continue
-        region = coco_box_to_region(pred["bbox"], image_width, image_height)
+        region = coco_box_to_region(pred["bbox"], image_width, image_height, PRED_LABEL)
         if region is not None:
             regions.append(region)
+
+    # GT boxes that no prediction touches at all (model misses them).
+    if iou_threshold is not None:
+        pred_boxes = [pred["bbox"] for pred in preds]
+        for gt_box in gt_boxes:
+            if max_iou(gt_box, pred_boxes) > 0:
+                continue
+            region = coco_box_to_region(gt_box, image_width, image_height, GT_HARD_LABEL)
+            if region is not None:
+                regions.append(region)
+
     return regions
 
 
@@ -257,15 +284,15 @@ def index_tasks_by_basename(tasks: list[Any]) -> dict[str, Any]:
     return by_basename
 
 
-def sync_pred_regions(ls: LabelStudio, task: Any, regions: list[dict[str, Any]]) -> str:
+def sync_review_regions(ls: LabelStudio, task: Any, regions: list[dict[str, Any]]) -> str:
     """
-    Make the task's first annotation hold exactly ``regions`` as its ``ship-pred``
-    boxes: strip any previously imported ``ship-pred``, then add the new ones,
-    always keeping the GT ``ship`` boxes.
+    Make the task's first annotation hold exactly ``regions`` as its imported
+    ``ship-pred``/``ship-gt`` boxes: strip any previously imported ones, then add
+    the new ones, always keeping the manual GT ``ship`` boxes.
 
     Passing ``regions=[]`` is valid and the key reason this iterates tasks rather
     than COCO images: a task NOT covered by the current split (or whose
-    predictions now all agree with GT) gets its stale ``ship-pred`` cleared. An
+    predictions now all agree with GT) gets its stale overlays cleared. An
     annotation left with nothing is deleted; tasks that need no change cost no
     API call.
 
@@ -281,15 +308,15 @@ def sync_pred_regions(ls: LabelStudio, task: Any, regions: list[dict[str, Any]])
         return "created"
 
     existing = list(get_field(target, "result", []) or [])
-    if not regions and not any(is_pred_region(r) for r in existing):
-        return "unchanged"  # nothing to add and no stale ship-pred to remove
+    if not regions and not any(is_imported_region(r) for r in existing):
+        return "unchanged"  # nothing to add and no stale overlay to remove
 
     ann_id = int(get_field(target, "id"))
-    merged = without_pred_regions(existing) + regions
+    merged = without_imported_regions(existing) + regions
     if merged:
         ls.annotations.update(id=ann_id, result=merged)
     else:
-        ls.annotations.delete(id=ann_id)  # annotation only ever held predictions
+        ls.annotations.delete(id=ann_id)  # annotation only ever held overlays
     return "updated" if regions else "cleared"
 
 
@@ -318,9 +345,9 @@ def import_predictions(
     task_by_basename = index_tasks_by_basename(fetch_tasks(ls))
 
     # Iterate over LS tasks (not COCO images): tasks the current split doesn't
-    # cover still need their stale `ship-pred` from a previous import cleared.
+    # cover still need their stale overlays from a previous import cleared.
     counts = {"created": 0, "updated": 0, "cleared": 0, "unchanged": 0}
-    kept_regions = 0
+    label_counts = {PRED_LABEL: 0, GT_HARD_LABEL: 0}
 
     for basename, task in task_by_basename.items():
         image_id = image_id_by_basename.get(basename)
@@ -328,7 +355,7 @@ def import_predictions(
             regions: list[dict[str, Any]] = []  # task not in this split -> clear stale only
         else:
             info = image_info[image_id]
-            regions = select_pred_regions(
+            regions = build_review_regions(
                 preds=preds_by_image.get(image_id, []),
                 gt_boxes=gt_boxes_by_image.get(image_id, []),
                 image_width=info["width"],
@@ -336,30 +363,36 @@ def import_predictions(
                 iou_threshold=iou_threshold,
             )
 
-        counts[sync_pred_regions(ls, task, regions)] += 1
-        kept_regions += len(regions)
+        counts[sync_review_regions(ls, task, regions)] += 1
+        for region in regions:
+            label_counts[region["value"]["rectanglelabels"][0]] += 1
 
-    images_without_task = sum(
-        1 for info in image_info.values() if Path(info["file_name"]).name not in task_by_basename
+    images_without_task = sorted(
+        Path(info["file_name"]).name
+        for info in image_info.values()
+        if Path(info["file_name"]).name not in task_by_basename
     )
 
     print(
         f"Done. created={counts['created']} updated={counts['updated']} "
         f"cleared={counts['cleared']} unchanged={counts['unchanged']}."
     )
-    print(f"Imported {kept_regions} '{PRED_LABEL}' box(es) total.")
+    print(f"Imported {label_counts[PRED_LABEL]} '{PRED_LABEL}' box(es).")
     if iou_threshold is not None:
-        print(f"(--add-pred: kept only predictions with best IoU < {iou_threshold} vs GT.)")
-    print(f"Split images with no matching LS task: {images_without_task}")
+        print(f"Imported {label_counts[GT_HARD_LABEL]} '{GT_HARD_LABEL}' box(es) (GT no prediction overlaps).")
+        print(f"(--add-pred: '{PRED_LABEL}' = predictions with best IoU < {iou_threshold} vs GT.)")
+    print(f"Split images with no matching LS task: {len(images_without_task)}")
+    for name in images_without_task:
+        print(f"  {name}")
 
 
 def clean() -> None:
     """
     Reset the project to GT only.
 
-    Removes every imported ``ship-pred`` region and all Label Studio prediction
-    objects, preserving the manual ``ship`` boxes and their per-region
-    attributes. An annotation left empty (it only held predictions) is deleted.
+    Removes every imported ``ship-pred``/``ship-gt`` region and all Label Studio
+    prediction objects, preserving the manual ``ship`` boxes and their per-region
+    attributes. An annotation left empty (it only held overlays) is deleted.
     """
     ls = connect_label_studio()
     tasks = fetch_tasks(ls)
@@ -369,7 +402,7 @@ def clean() -> None:
     for task in tasks:
         for ann in get_field(task, "annotations", []) or []:
             existing = list(get_field(ann, "result", []) or [])
-            kept = without_pred_regions(existing)
+            kept = without_imported_regions(existing)
             if len(kept) == len(existing):
                 continue  # nothing to strip
 
@@ -388,8 +421,8 @@ def clean() -> None:
                 predictions_deleted += 1
 
     print(
-        f"Clean done. Stripped '{PRED_LABEL}' from {annotations_updated} annotation(s), "
-        f"deleted {annotations_deleted} prediction-only annotation(s) and "
+        f"Clean done. Stripped '{PRED_LABEL}'/'{GT_HARD_LABEL}' from {annotations_updated} annotation(s), "
+        f"deleted {annotations_deleted} overlay-only annotation(s) and "
         f"{predictions_deleted} prediction object(s). GT '{GT_LABEL}' boxes preserved."
     )
 
