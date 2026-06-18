@@ -1,6 +1,7 @@
 import json
 import os
 from typing import Literal
+from urllib.parse import unquote
 
 
 SplitType = Literal["train", "val", "test", "all"]
@@ -26,7 +27,11 @@ def process_file(split: SplitType) -> None:
         annotations: list[dict] = data.get("annotations", [])
 
         for entry in images:
-            entry["file_name"] = os.path.basename(entry["file_name"])
+            file_name = entry["file_name"]
+            decoded = unquote(file_name)
+            normalized = decoded.replace("\\", "/")
+
+            entry["file_name"] = os.path.basename(normalized)
 
         for anno in annotations:
             anno["category_id"] = AITOD_SHIP_CATEGORY_ID
@@ -43,4 +48,4 @@ def process_file(split: SplitType) -> None:
 
 
 if __name__ == "__main__":
-    process_file(split="all")
+    process_file(split="val")
