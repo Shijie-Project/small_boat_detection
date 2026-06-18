@@ -5,6 +5,7 @@ Copyright(c) 2024 The D-FINE Authors. All Rights Reserved.
 
 import copy
 import os
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -28,6 +29,7 @@ def load_config(file_path, cfg=dict()):
     _, ext = os.path.splitext(file_path)
     assert ext in [".yml", ".yaml"], "only support yaml files"
 
+    file_path = Path(file_path).resolve().as_posix()
     with open(file_path) as f:
         file_cfg = yaml.load(f, Loader=yaml.Loader)
         if file_cfg is None:

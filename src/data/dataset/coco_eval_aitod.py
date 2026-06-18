@@ -16,30 +16,36 @@ from ...core import register
 from ...misc import dist_utils
 
 
-__all__ = ["AitodCocoEvaluator"]
+__all__ = [
+    "AitodCocoEvaluator",
+]
 
 
 @register()
 class AitodCocoEvaluator:
-    def __init__(self, coco_gt, iou_types, print_func=print):
+    def __init__(self, coco_gt, iou_types):
         assert isinstance(iou_types, (list, tuple))
         coco_gt = copy.deepcopy(coco_gt)
         self.coco_gt: COCO = coco_gt
         self.iou_types = iou_types
-        self.print_func = print_func
 
-        self.cleanup()
+        self.coco_eval = {}
+        for iou_type in iou_types:
+            self.coco_eval[iou_type] = COCOeval_faster(
+                coco_gt, iouType=iou_type, print_function=print, separate_eval=True
+            )
+
+        self.img_ids = []
+        self.eval_imgs = {k: [] for k in iou_types}
 
     def cleanup(self):
         self.coco_eval = {}
         for iou_type in self.iou_types:
             self.coco_eval[iou_type] = COCOeval_faster(
-                cocoGt=self.coco_gt, iouType=iou_type, print_function=self.print_func, separate_eval=True
+                self.coco_gt, iouType=iou_type, print_function=print, separate_eval=True
             )
-
         self.img_ids = []
         self.eval_imgs = {k: [] for k in self.iou_types}
-        self.predictions = {k: [] for k in self.iou_types}
 
     def update(self, predictions):
         img_ids = list(np.unique(list(predictions.keys())))
@@ -48,7 +54,6 @@ class AitodCocoEvaluator:
         for iou_type in self.iou_types:
             results = self.prepare(predictions, iou_type)
             coco_eval = self.coco_eval[iou_type]
-            self.predictions[iou_type].extend(results)
 
             # suppress pycocotools prints
             with open(os.devnull, "w") as devnull:
@@ -83,6 +88,16 @@ class AitodCocoEvaluator:
         for iou_type, coco_eval in self.coco_eval.items():
             print(f"IoU metric: {iou_type}")
             coco_eval.summarize()
+            # Extra: AP@0.5 broken out per object-size bin. The package's default
+            # AITOD summary only reports per-size AP at IoU=.50:.95; this appends
+            # the IoU=0.5 value for each size. Reuses the package's own _summarize
+            # + area labels, so it adapts to verytiny/tiny/small/medium automatically.
+            if iou_type == "bbox":
+                max_det = coco_eval.params.maxDets[-1]
+                for area_lbl in coco_eval.params.areaRngLbl:
+                    if area_lbl == "all":
+                        continue  # AP@.5 for area=all is already printed above
+                    coco_eval._summarize(1, iouThr=0.5, areaRng=area_lbl, maxDets=max_det)
 
     def prepare(self, predictions, iou_type):
         if iou_type == "bbox":
@@ -114,7 +129,6 @@ class AitodCocoEvaluator:
                         "score": scores[k],
                     }
                     for k, box in enumerate(boxes)
-                    if scores[k] > 0.05
                 ]
             )
         return coco_results
