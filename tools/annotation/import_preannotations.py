@@ -215,33 +215,34 @@ def build_review_regions(
     gt_boxes: list[list[float]],
     image_width: int,
     image_height: int,
-    iou_threshold: float | None,
+    pred_mode: Literal["all", "disagree", "none"],
+    add_gt: bool,
+    iou_threshold: float,
 ) -> list[dict[str, Any]]:
     """
     Build the review boxes to merge into one image's annotation.
 
-    Predictions -> ``ship-pred`` regions:
-      * ``iou_threshold is None`` (plain import): every prediction is shown.
-      * ``iou_threshold`` set (--add-pred): only predictions that disagree with
-        GT, i.e. whose best IoU with any GT box is below the threshold.
+    ``pred_mode`` controls the ``ship-pred`` (prediction) regions:
+      * "all"      — every prediction (plain import).
+      * "disagree" — only predictions whose best IoU with any GT box is below
+                     ``iou_threshold`` (--add-pred).
+      * "none"     — no prediction regions.
 
-    GT -> ``ship-gt`` regions (only in --add-pred): every GT box that NO
-    prediction overlaps at all (best IoU with the predictions is 0). These are
-    boxes the model misses entirely and are hard to detect, so the GT box itself
-    is highlighted for review.
+    ``add_gt`` (--add-gt) adds a ``ship-gt`` region for every GT box that NO
+    prediction overlaps at all (best IoU with the predictions is 0): boxes the
+    model misses entirely and are hard to detect, so the GT box is highlighted.
     """
     regions: list[dict[str, Any]] = []
 
-    # Predictions that disagree with (or, in plain import, all) GT.
-    for pred in preds:
-        if iou_threshold is not None and max_iou(pred["bbox"], gt_boxes) >= iou_threshold:
-            continue
-        region = coco_box_to_region(pred["bbox"], image_width, image_height, PRED_LABEL)
-        if region is not None:
-            regions.append(region)
+    if pred_mode != "none":
+        for pred in preds:
+            if pred_mode == "disagree" and max_iou(pred["bbox"], gt_boxes) >= iou_threshold:
+                continue
+            region = coco_box_to_region(pred["bbox"], image_width, image_height, PRED_LABEL)
+            if region is not None:
+                regions.append(region)
 
-    # GT boxes that no prediction touches at all (model misses them).
-    if iou_threshold is not None:
+    if add_gt:
         pred_boxes = [pred["bbox"] for pred in preds]
         for gt_box in gt_boxes:
             if max_iou(gt_box, pred_boxes) > 0:
@@ -273,14 +274,22 @@ def fetch_tasks(ls: LabelStudio) -> list[Any]:
     return tasks
 
 
+def task_image_name(task: Any) -> str:
+    """Image file name for a task (falls back to the task id if unavailable)."""
+    data = getattr(task, "data", {}) or {}
+    image_ref = data.get(DATA_IMAGE_KEY)
+    if image_ref:
+        return basename_from_ls_path(str(image_ref))
+    return f"task#{get_field(task, 'id')}"
+
+
 def index_tasks_by_basename(tasks: list[Any]) -> dict[str, Any]:
     """image file name -> task, so COCO images can be matched to LS tasks."""
     by_basename: dict[str, Any] = {}
     for task in tasks:
         data = getattr(task, "data", {}) or {}
-        image_ref = data.get(DATA_IMAGE_KEY)
-        if image_ref:
-            by_basename[basename_from_ls_path(str(image_ref))] = task
+        if data.get(DATA_IMAGE_KEY):
+            by_basename[task_image_name(task)] = task
     return by_basename
 
 
@@ -325,13 +334,17 @@ def sync_review_regions(ls: LabelStudio, task: Any, regions: list[dict[str, Any]
 # --------------------------------------------------------------------------- #
 def import_predictions(
     split: Literal["train", "val", "test", "all"],
-    iou_threshold: float | None = None,
+    pred_mode: Literal["all", "disagree", "none"] = "all",
+    add_gt: bool = False,
+    iou_threshold: float = IOU_MATCH_THRESHOLD,
 ) -> None:
     """
-    Import predictions as ``ship-pred`` boxes alongside the GT.
+    Merge review overlays into the GT annotations of the matching LS tasks.
 
-    ``iou_threshold=None`` imports every prediction above ``SCORE_THRESHOLD``.
-    A value (the --add-pred mode) keeps only predictions that disagree with GT.
+    ``pred_mode`` selects the ``ship-pred`` boxes: "all" (plain import),
+    "disagree" (--add-pred: best IoU with GT < ``iou_threshold``), or "none".
+    ``add_gt`` (--add-gt) also adds ``ship-gt`` boxes for GT no prediction
+    overlaps. Stale overlays on every task are refreshed regardless of mode.
     """
     coco_gt = load_json(coco_path(split, "coco"))
     coco_preds = load_json(coco_path(split, "preds"))
@@ -360,6 +373,8 @@ def import_predictions(
                 gt_boxes=gt_boxes_by_image.get(image_id, []),
                 image_width=info["width"],
                 image_height=info["height"],
+                pred_mode=pred_mode,
+                add_gt=add_gt,
                 iou_threshold=iou_threshold,
             )
 
@@ -377,10 +392,13 @@ def import_predictions(
         f"Done. created={counts['created']} updated={counts['updated']} "
         f"cleared={counts['cleared']} unchanged={counts['unchanged']}."
     )
-    print(f"Imported {label_counts[PRED_LABEL]} '{PRED_LABEL}' box(es).")
-    if iou_threshold is not None:
-        print(f"Imported {label_counts[GT_HARD_LABEL]} '{GT_HARD_LABEL}' box(es) (GT no prediction overlaps).")
-        print(f"(--add-pred: '{PRED_LABEL}' = predictions with best IoU < {iou_threshold} vs GT.)")
+    if pred_mode != "none":
+        print(f"Imported {label_counts[PRED_LABEL]} '{PRED_LABEL}' box(es).")
+        if pred_mode == "disagree":
+            print(f"  ('{PRED_LABEL}' = predictions with best IoU < {iou_threshold} vs GT.)")
+    if add_gt:
+        print(f"Imported {label_counts[GT_HARD_LABEL]} '{GT_HARD_LABEL}' box(es).")
+        print(f"  ('{GT_HARD_LABEL}' = GT boxes no prediction overlaps at all.)")
     print(f"Split images with no matching LS task: {len(images_without_task)}")
     for name in images_without_task:
         print(f"  {name}")
@@ -427,6 +445,36 @@ def clean() -> None:
     )
 
 
+def examine() -> None:
+    """
+    Audit the project: verify no annotation still holds imported overlays.
+
+    Prints the image name of every task whose annotations still contain a
+    ``ship-pred`` or ``ship-gt`` region (e.g. to confirm a ``--clean`` removed
+    them all). Reports OK when the project is clean.
+    """
+    ls = connect_label_studio()
+    tasks = fetch_tasks(ls)
+
+    flagged = sorted(
+        task_image_name(task)
+        for task in tasks
+        if any(
+            is_imported_region(region)
+            for ann in get_field(task, "annotations", []) or []
+            for region in get_field(ann, "result", []) or []
+        )
+    )
+
+    if not flagged:
+        print(f"OK: no annotation contains '{PRED_LABEL}' or '{GT_HARD_LABEL}' regions.")
+        return
+
+    print(f"Found {len(flagged)} task(s) still containing '{PRED_LABEL}'/'{GT_HARD_LABEL}' regions:")
+    for name in flagged:
+        print(f"  {name}")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument(
@@ -443,7 +491,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--add-pred",
         action="store_true",
-        help="Import only predictions that disagree with GT (best IoU < --iou-threshold).",
+        help=f"Import only predictions that disagree with GT (best IoU < --iou-threshold) as '{PRED_LABEL}'.",
+    )
+    parser.add_argument(
+        "--add-gt",
+        action="store_true",
+        help=f"Add a '{GT_HARD_LABEL}' box for every GT box no prediction overlaps. Combinable with --add-pred.",
+    )
+    parser.add_argument(
+        "--examine",
+        action="store_true",
+        help=f"Audit only: print image names of tasks still holding '{PRED_LABEL}'/'{GT_HARD_LABEL}' regions.",
     )
     parser.add_argument(
         "--iou-threshold",
@@ -457,9 +515,16 @@ def parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     args = parse_args()
-    if args.clean:
+    if args.examine:
+        examine()
+    elif args.clean:
         clean()
-    elif args.add_pred:
-        import_predictions(split=args.split, iou_threshold=args.iou_threshold)
+    elif args.add_pred or args.add_gt:
+        import_predictions(
+            split=args.split,
+            pred_mode="disagree" if args.add_pred else "none",
+            add_gt=args.add_gt,
+            iou_threshold=args.iou_threshold,
+        )
     else:
-        import_predictions(split=args.split)
+        import_predictions(split=args.split, pred_mode="all", add_gt=False)
