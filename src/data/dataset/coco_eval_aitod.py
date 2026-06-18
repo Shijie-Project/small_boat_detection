@@ -29,14 +29,7 @@ class AitodCocoEvaluator:
         self.coco_gt: COCO = coco_gt
         self.iou_types = iou_types
 
-        self.coco_eval = {}
-        for iou_type in iou_types:
-            self.coco_eval[iou_type] = COCOeval_faster(
-                coco_gt, iouType=iou_type, print_function=print, separate_eval=True
-            )
-
-        self.img_ids = []
-        self.eval_imgs = {k: [] for k in iou_types}
+        self.cleanup()
 
     def cleanup(self):
         self.coco_eval = {}
@@ -46,6 +39,7 @@ class AitodCocoEvaluator:
             )
         self.img_ids = []
         self.eval_imgs = {k: [] for k in self.iou_types}
+        self.predictions = {k: [] for k in self.iou_types}
 
     def update(self, predictions):
         img_ids = list(np.unique(list(predictions.keys())))
@@ -54,6 +48,7 @@ class AitodCocoEvaluator:
         for iou_type in self.iou_types:
             results = self.prepare(predictions, iou_type)
             coco_eval = self.coco_eval[iou_type]
+            self.predictions[iou_type].extend(results)
 
             # suppress pycocotools prints
             with open(os.devnull, "w") as devnull:
