@@ -179,7 +179,7 @@ def generate_scales(base_size, base_size_repeat, window_size):
         return scales
     else:
         # 处理方形尺寸
-        step = 4 * window_size
+        step = 8 * window_size  # here the stride=8 is used for computing the density map
         base_size = (base_size // step) * step or step
         base_min = int(base_size * 0.75)
         start_low = ((base_min + step - 1) // step) * step
