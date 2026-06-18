@@ -26,7 +26,7 @@ export CUDA_VISIBLE_DEVICES=0,1
 # Use ONLY the python in this venv folder; error out if it isn't there. No PATH
 # / system / activated-venv fallbacks. Launch via `python -m torch.distributed.run`
 # (not bare `torchrun`) so this exact interpreter is always the one used.
-VENV=/data/tianxliu/shijli/venv/python312
+VENV=/data/shijili/venv/perceptia
 PYTHON=""
 for c in "${VENV}/bin/python" "${VENV}/bin/python3" "${VENV}/python" "${VENV}/Scripts/python.exe"; do
   [ -x "$c" ] && { PYTHON="$c"; break; }
