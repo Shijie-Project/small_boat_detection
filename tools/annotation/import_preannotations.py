@@ -257,23 +257,40 @@ def index_tasks_by_basename(tasks: list[Any]) -> dict[str, Any]:
     return by_basename
 
 
-def upsert_pred_regions(ls: LabelStudio, task: Any, regions: list[dict[str, Any]]) -> str:
+def sync_pred_regions(ls: LabelStudio, task: Any, regions: list[dict[str, Any]]) -> str:
     """
-    Write ``regions`` into the task's first annotation, replacing any previously
-    imported ``ship-pred`` boxes while keeping the GT ``ship`` boxes. If the task
-    has no annotation yet, create one. Returns "updated" or "created".
+    Make the task's first annotation hold exactly ``regions`` as its ``ship-pred``
+    boxes: strip any previously imported ``ship-pred``, then add the new ones,
+    always keeping the GT ``ship`` boxes.
+
+    Passing ``regions=[]`` is valid and the key reason this iterates tasks rather
+    than COCO images: a task NOT covered by the current split (or whose
+    predictions now all agree with GT) gets its stale ``ship-pred`` cleared. An
+    annotation left with nothing is deleted; tasks that need no change cost no
+    API call.
+
+    Returns one of "created", "updated", "cleared", "unchanged".
     """
     annotations = get_field(task, "annotations", []) or []
     target = annotations[0] if annotations else None
 
-    if target is not None:
-        existing = list(get_field(target, "result", []) or [])
-        merged = without_pred_regions(existing) + regions
-        ls.annotations.update(id=int(get_field(target, "id")), result=merged)
-        return "updated"
+    if target is None:
+        if not regions:
+            return "unchanged"  # no annotation and nothing to add
+        ls.annotations.create(id=int(get_field(task, "id")), result=regions)
+        return "created"
 
-    ls.annotations.create(id=int(get_field(task, "id")), result=regions)
-    return "created"
+    existing = list(get_field(target, "result", []) or [])
+    if not regions and not any(is_pred_region(r) for r in existing):
+        return "unchanged"  # nothing to add and no stale ship-pred to remove
+
+    ann_id = int(get_field(target, "id"))
+    merged = without_pred_regions(existing) + regions
+    if merged:
+        ls.annotations.update(id=ann_id, result=merged)
+    else:
+        ls.annotations.delete(id=ann_id)  # annotation only ever held predictions
+    return "updated" if regions else "cleared"
 
 
 # --------------------------------------------------------------------------- #
@@ -295,44 +312,45 @@ def import_predictions(
     image_info = index_image_info(coco_gt)
     gt_boxes_by_image = index_gt_boxes(coco_gt)
     preds_by_image = index_predictions(coco_preds, SCORE_THRESHOLD)
+    image_id_by_basename = {Path(info["file_name"]).name: image_id for image_id, info in image_info.items()}
 
     ls = connect_label_studio()
     task_by_basename = index_tasks_by_basename(fetch_tasks(ls))
 
-    updated = created = kept_regions = 0
-    skipped_no_task = skipped_no_preds = 0
+    # Iterate over LS tasks (not COCO images): tasks the current split doesn't
+    # cover still need their stale `ship-pred` from a previous import cleared.
+    counts = {"created": 0, "updated": 0, "cleared": 0, "unchanged": 0}
+    kept_regions = 0
 
-    for image_id, info in image_info.items():
-        task = task_by_basename.get(Path(info["file_name"]).name)
-        if task is None:
-            skipped_no_task += 1
-            continue
+    for basename, task in task_by_basename.items():
+        image_id = image_id_by_basename.get(basename)
+        if image_id is None:
+            regions: list[dict[str, Any]] = []  # task not in this split -> clear stale only
+        else:
+            info = image_info[image_id]
+            regions = select_pred_regions(
+                preds=preds_by_image.get(image_id, []),
+                gt_boxes=gt_boxes_by_image.get(image_id, []),
+                image_width=info["width"],
+                image_height=info["height"],
+                iou_threshold=iou_threshold,
+            )
 
-        preds = preds_by_image.get(image_id, [])
-        if not preds:
-            skipped_no_preds += 1
-            continue
-
-        regions = select_pred_regions(
-            preds=preds,
-            gt_boxes=gt_boxes_by_image.get(image_id, []),
-            image_width=info["width"],
-            image_height=info["height"],
-            iou_threshold=iou_threshold,
-        )
-        if not regions:
-            continue
-
-        action = upsert_pred_regions(ls, task, regions)
-        updated += action == "updated"
-        created += action == "created"
+        counts[sync_pred_regions(ls, task, regions)] += 1
         kept_regions += len(regions)
 
-    print(f"Done. Updated {updated} and created {created} annotation(s) with '{PRED_LABEL}' boxes.")
+    images_without_task = sum(
+        1 for info in image_info.values() if Path(info["file_name"]).name not in task_by_basename
+    )
+
+    print(
+        f"Done. created={counts['created']} updated={counts['updated']} "
+        f"cleared={counts['cleared']} unchanged={counts['unchanged']}."
+    )
+    print(f"Imported {kept_regions} '{PRED_LABEL}' box(es) total.")
     if iou_threshold is not None:
-        print(f"--add-pred: kept {kept_regions} prediction(s) with best IoU < {iou_threshold} vs GT.")
-    print(f"Skipped (no matching LS task): {skipped_no_task}")
-    print(f"Skipped (task exists but no predictions): {skipped_no_preds}")
+        print(f"(--add-pred: kept only predictions with best IoU < {iou_threshold} vs GT.)")
+    print(f"Split images with no matching LS task: {images_without_task}")
 
 
 def clean() -> None:
