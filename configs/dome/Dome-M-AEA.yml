@@ -33,7 +33,7 @@ optimizer:
 # Increase to search for the optimal ema
 train_dataloader:
   num_workers: 0
-  total_batch_size: 8
+  total_batch_size: 4
   dataset:
     img_folder: "~/Data/datasets/AEA/images/train"
     ann_file: "~/Data/datasets/AEA/annotations/train_coco.json"
@@ -60,7 +60,7 @@ train_dataloader:
 
 val_dataloader:
   num_workers: 0
-  total_batch_size: 16
+  total_batch_size: 8
   dataset:
     transforms:
       ops:

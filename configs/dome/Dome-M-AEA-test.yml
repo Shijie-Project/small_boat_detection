@@ -35,8 +35,8 @@ train_dataloader:
   num_workers: 0
   total_batch_size: 8
   dataset:
-    img_folder: "C:/Shijie_Li/boat_detection/code/data/images/train"
-    ann_file: "C:/Shijie_Li/boat_detection/code/data/annotations/train_coco.json"
+    img_folder: "../data/images/train"
+    ann_file: "../data/annotations/train_coco.json"
     transforms:
       ops:
         - { type: RandomPhotometricDistort, p: 0.5 }
@@ -66,7 +66,7 @@ val_dataloader:
       ops:
         - { type: Resize, size: [ 1024, 1024 ], }
         - { type: ConvertPILImage, dtype: 'float32', scale: True }
-    img_folder: "C:/Shijie_Li/boat_detection/code/data/images/val"
-    ann_file: "C:/Shijie_Li/boat_detection/code/data/annotations/val_coco.json"
+    img_folder: "../data/images/val"
+    ann_file: "../data/annotations/val_coco.json"
   collate_fn:
     mwas_window_size: 16
