@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Small Boat Detection — Dashboard</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+<header>
+  <div class="dot" id="dot"></div>
+  <h1>Small Boat Detection — Dashboard</h1>
+</header>
+
+<div class="wrap">
+  <div class="panel">
+    <div class="tabs" id="tabs"></div>
+    <div id="form"></div>
+    <div class="btns">
+      <button id="run">Start</button>
+      <button id="stop" disabled>Stop</button>
+    </div>
+    <div class="meta" id="meta"></div>
+  </div>
+
+  <div class="panel console-wrap">
+    <div class="console-head">
+      <span class="st" id="status">idle</span>
+      <button class="clear" id="clear">clear</button>
+    </div>
+    <div class="console" id="log"></div>
+  </div>
+</div>
+
+<script type="module" src="/static/js/app.js"></script>
+</body>
+</html>
