@@ -1,11 +1,10 @@
 """Feature registry -- one module per tab.
 
 To add a feature: drop a module here with a :class:`~webui.features.base.Feature`
-subclass, list it in ``FEATURES`` below, and add the matching form spec in
-``static/js/features/``.
+subclass (fields + ``build``), then list it in ``FEATURES`` below.
 """
 
-from .base import Feature, JobSpec
+from .base import Feature, Field, JobSpec
 from .test import TestFeature
 from .train import TrainFeature
 

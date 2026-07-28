@@ -4,6 +4,7 @@ from pathlib import Path
 
 from .base import (
     Feature,
+    Field,
     JobSpec,
     config_path,
     existing_file,
@@ -11,6 +12,7 @@ from .base import (
     launcher,
     positive_int,
     python_executable,
+    runtime_rows,
     timestamp,
 )
 
@@ -19,6 +21,25 @@ class TrainFeature(Feature):
     name = "train"
     label = "Train"
     description = "Start a training run from scratch or from a tuning checkpoint."
+    fields = [
+        Field(
+            "config",
+            "Config (-c)",
+            kind="choice",
+            source="configs",
+            value="configs/dome/Dome-M-AEA.yml",
+            prefer="AEA",
+        ),
+        Field(
+            "checkpoint",
+            "Tuning checkpoint (-t, optional)",
+            kind="choice",
+            source="checkpoints",
+            optional=True,
+            empty_label="(none / from scratch)",
+        ),
+        *runtime_rows(port=7789),
+    ]
 
     def build(self, params):
         config = config_path(params)

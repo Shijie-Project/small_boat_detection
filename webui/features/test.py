@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .base import (
     Feature,
+    Field,
     JobSpec,
     config_path,
     existing_file,
@@ -15,6 +16,7 @@ from .base import (
     launcher,
     positive_int,
     python_executable,
+    runtime_rows,
 )
 
 
@@ -22,6 +24,24 @@ class TestFeature(Feature):
     name = "test"
     label = "Test"
     description = "Evaluate a checkpoint; results land beside the checkpoint."
+    fields = [
+        Field(
+            "config",
+            "Config (-c)",
+            kind="choice",
+            source="configs",
+            value="configs/dome/Dome-M-AEA-test.yml",
+            prefer="AEA",
+        ),
+        Field(
+            "checkpoint",
+            "Checkpoint to evaluate (-r, required)",
+            kind="choice",
+            source="checkpoints",
+            info="Results are written next to the checkpoint.",
+        ),
+        *runtime_rows(port=7778),
+    ]
 
     def build(self, params):
         config = config_path(params)

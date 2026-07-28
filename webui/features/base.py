@@ -1,15 +1,37 @@
 """What a feature is, plus the argument handling train and test have in common.
 
-A feature turns the form values the page posts into a :class:`JobSpec`; the app
-hands that to the shared job runner. Anything a second feature would also need
-(config lookup, checkpoint lookup, the torchrun prefix) lives here rather than
-in the feature modules.
+A feature declares its form (:class:`Field`) and turns the values back into a
+:class:`JobSpec`; the app renders the one and runs the other. Anything a second
+feature would also need (config lookup, checkpoint lookup, the torchrun prefix)
+lives here rather than in the feature modules.
 """
 
 import sys
 import time
+from dataclasses import dataclass
 
 from ..core.paths import TRAIN_SCRIPT, resolve
+
+
+@dataclass
+class Field:
+    """One control in a feature's form.
+
+    ``kind="choice"`` renders a dropdown filled from :mod:`webui.core.discovery`
+    (``source`` is the key: ``"configs"`` / ``"checkpoints"``); anything else is
+    a text box. ``value`` is the default -- for a dropdown, the option to start
+    on -- and ``prefer`` is a regex fallback for when that option is missing.
+    """
+
+    name: str
+    label: str
+    kind: str = "text"
+    source: str = ""
+    value: str = ""
+    prefer: str = ""
+    optional: bool = False
+    empty_label: str = "(none)"
+    info: str = ""
 
 
 class JobSpec:
@@ -24,37 +46,44 @@ class JobSpec:
 class Feature:
     """One tab in the dashboard.
 
-    Subclasses set ``name``/``label`` and implement :meth:`build`. Override
-    :meth:`register` to add endpoints of your own beyond ``/api/<name>/start``.
+    Subclasses set ``name``/``label``/``fields`` and implement :meth:`build`.
+    Override :meth:`panel` for a tab that needs more than the declared fields.
     """
 
     name = ""
     label = ""
     description = ""
+    fields = ()
 
     def build(self, params) -> JobSpec:
         raise NotImplementedError
 
-    def register(self, router):
-        """Hook for extra routes; the start endpoint is wired up by the app."""
+    def panel(self, options):
+        """Render the tab body; returns ``{field name: component}``."""
+        from ..core.ui import render_fields
 
-    def info(self):
-        return {"name": self.name, "label": self.label, "description": self.description}
+        return render_fields(self.fields, options)
 
 
 # --------------------------------------------------------------------------- #
-# Form value helpers. They raise ValueError, which the app turns into a 400.
+# Form value helpers. They raise ValueError, which the app shows as a toast.
 # --------------------------------------------------------------------------- #
 def timestamp():
     return time.strftime("%Y%m%d-%H%M%S")
 
 
+def text(params, key):
+    """One form value as a string -- an untouched dropdown hands back ``None``."""
+    value = params.get(key)
+    return "" if value is None else str(value).strip()
+
+
 def python_executable(params):
-    return params.get("python") or sys.executable
+    return text(params, "python") or sys.executable
 
 
 def positive_int(params, key, default):
-    raw = str(params.get(key, "")).strip() or str(default)
+    raw = text(params, key) or str(default)
     try:
         value = int(raw)
     except ValueError:
@@ -65,8 +94,8 @@ def positive_int(params, key, default):
 
 
 def existing_file(params, key, kind, required=True):
-    """Validate one of the paths we listed in ``/api/options``."""
-    value = str(params.get(key, "")).strip()
+    """Validate one of the paths the dropdowns were filled with."""
+    value = text(params, key)
     if not value:
         if required:
             raise ValueError(f"{kind} is required")
@@ -82,7 +111,7 @@ def config_path(params):
 
 
 def gpu_env(params):
-    gpus = str(params.get("gpus", "")).strip()
+    gpus = text(params, "gpus")
     return {"CUDA_VISIBLE_DEVICES": gpus} if gpus else {}
 
 
@@ -98,3 +127,17 @@ def launcher(python, nproc, port):
             TRAIN_SCRIPT,
         ]
     return [python, TRAIN_SCRIPT]
+
+
+def runtime_rows(port):
+    """The two rows every ``train.py``-based feature ends with."""
+    return [
+        [
+            Field("gpus", "GPUs (CUDA_VISIBLE_DEVICES)", value="0", info="e.g. 0,1"),
+            Field("seed", "Seed", value="42"),
+        ],
+        [
+            Field("nproc", "nproc_per_node", value="1"),
+            Field("port", "master_port", value=str(port)),
+        ],
+    ]

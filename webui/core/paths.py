@@ -18,32 +18,41 @@ CKPT_DIRS = ROOT.parent / "ckpts"
 DATA_DIRS = ROOT.parent / "data"
 TRAIN_SCRIPT = "train.py"
 
+# The trees the UI lists from, and therefore the only ones it may hand back.
+ALLOWED_ROOTS = (ROOT, CKPT_DIRS, DATA_DIRS)
+
 HOST = os.environ.get("WEBUI_HOST", "127.0.0.1")
 PORT = int(os.environ.get("WEBUI_PORT", "8000"))
 
 
 def rel(path) -> str:
-    """Path relative to the project root, with forward slashes."""
-    path = Path(path)
-    try:
-        path = path.resolve().relative_to(ROOT)
-    except ValueError:
-        pass
-    return str(path).replace("\\", "/")
+    """Path as the UI shows it -- relative to the project root where possible.
 
-
-def resolve(rel_path):
-    """Resolve a browser-supplied relative path inside the project root.
-
-    Returns ``None`` when the path escapes the root; the page only ever sends
-    back paths we listed ourselves, so anything else is a bug or a probe.
+    Checkpoints and datasets sit next to the project, so they come out as
+    ``../ckpts/...`` / ``../data/...``, the same way the configs reference them;
+    anything further out stays absolute.
     """
-    if not rel_path:
+    candidate = Path(path)
+    resolved = (candidate if candidate.is_absolute() else ROOT / candidate).resolve()
+    for base, prefix in ((ROOT, ""), (ROOT.parent, "../")):
+        try:
+            return prefix + str(resolved.relative_to(base)).replace("\\", "/")
+        except ValueError:
+            continue
+    return str(resolved).replace("\\", "/")
+
+
+def resolve(path):
+    """Turn a browser-supplied path back into a real one, or ``None``.
+
+    Relative paths are read from the project root -- the directory jobs run in.
+    Anything outside :data:`ALLOWED_ROOTS` is refused: the page only sends back
+    paths we listed ourselves, so anything else is a bug or a probe.
+    """
+    if not path:
         return None
-    candidate = Path(rel_path)
-    if candidate.is_absolute():
-        return None
-    resolved = (ROOT / candidate).resolve()
-    if resolved != ROOT and ROOT not in resolved.parents:
-        return None
-    return resolved
+    candidate = Path(path)
+    resolved = (candidate if candidate.is_absolute() else ROOT / candidate).resolve()
+    if any(resolved == base or base in resolved.parents for base in ALLOWED_ROOTS):
+        return resolved
+    return None

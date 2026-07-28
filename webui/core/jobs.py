@@ -8,8 +8,10 @@ refused rather than queued.
 import os
 import signal
 import subprocess
+import sys
 import threading
 import time
+import types
 from collections import deque
 from datetime import datetime
 
@@ -17,6 +19,7 @@ from .paths import ROOT
 
 
 MAX_LINES = 5000
+STATE_MODULE = "_webui_job_state"
 
 
 def _popen_kwargs():
@@ -119,4 +122,20 @@ class Job:
         return True, "stopping"
 
 
-JOB = Job()
+def _shared_job():
+    """The one job of this interpreter, kept across gradio's hot reload.
+
+    Reloading drops every module under ``webui/`` from ``sys.modules``, so a
+    plain module-level singleton would come back empty and we would lose the
+    handle to a run that is still going -- no log, no way to stop it. A
+    synthetic module has no ``__file__``, so the file watcher leaves it alone.
+    """
+    state = sys.modules.get(STATE_MODULE)
+    if state is None:
+        state = types.ModuleType(STATE_MODULE)
+        state.job = Job()
+        sys.modules[STATE_MODULE] = state
+    return state.job
+
+
+JOB = _shared_job()
