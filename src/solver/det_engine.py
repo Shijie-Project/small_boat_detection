@@ -45,11 +45,9 @@ def train_one_epoch(
     max_norm: float = 0,
     **kwargs,
 ):
-    log_file = Path(kwargs.get("log_file", None))
-    if log_file is None:
-        print_func = print
-    else:
-        print_func = partial(tee_print, file_path=log_file)
+    log_file = kwargs.get("log_file")
+    # Path(None) raises, so keep the fallback on the raw value.
+    print_func = print if log_file is None else partial(tee_print, file_path=Path(log_file))
 
     model.train()
     criterion.train()
@@ -167,11 +165,9 @@ def evaluate(
     output_dir,
     **kwargs,
 ):
-    log_file = Path(kwargs.get("log_file", None))
-    if log_file is None:
-        print_func = print
-    else:
-        print_func = partial(tee_print, file_path=log_file)
+    log_file = kwargs.get("log_file")
+    # Path(None) raises, so keep the fallback on the raw value.
+    print_func = print if log_file is None else partial(tee_print, file_path=Path(log_file))
 
     if SAVE_TEST_VISUALIZE_RESULT:
         visualize_dir = output_dir.joinpath("visualize_results")
@@ -274,7 +270,7 @@ def evaluate(
     # accumulate predictions from all images
     if coco_evaluator is not None:
         coco_evaluator.accumulate()
-        coco_evaluator.summarize()
+        coco_evaluator.summarize(print_func)
 
     stats = {}
     # stats = {k: meter.global_avg for k, meter in metric_logger.meters.items()}

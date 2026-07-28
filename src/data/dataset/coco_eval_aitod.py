@@ -79,9 +79,12 @@ class AitodCocoEvaluator:
         for coco_eval in self.coco_eval.values():
             coco_eval.accumulate()
 
-    def summarize(self):
+    def summarize(self, print_func=None):
+        """``print_func`` (e.g. a tee onto log.txt) also captures the summary in a file."""
+        emit = print_func or print
         for iou_type, coco_eval in self.coco_eval.items():
-            print(f"IoU metric: {iou_type}")
+            coco_eval.print_function = emit
+            emit(f"IoU metric: {iou_type}")
             coco_eval.summarize()
             # Extra: AP@0.5 broken out per object-size bin. The package's default
             # AITOD summary only reports per-size AP at IoU=.50:.95; this appends
@@ -93,6 +96,11 @@ class AitodCocoEvaluator:
                     if area_lbl == "all":
                         continue  # AP@.5 for area=all is already printed above
                     coco_eval._summarize(1, iouThr=0.5, areaRng=area_lbl, maxDets=max_det)
+                # AR@0.5 broken out per object-size bin (ap=0 -> recall), mirroring
+                # the per-size AP above. area=all is included here since the default
+                # AR summary only reports it at IoU=.50:.95, not at IoU=0.5.
+                for area_lbl in coco_eval.params.areaRngLbl:
+                    coco_eval._summarize(0, iouThr=0.5, areaRng=area_lbl, maxDets=max_det)
 
     def prepare(self, predictions, iou_type):
         if iou_type == "bbox":

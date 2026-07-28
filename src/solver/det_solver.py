@@ -207,6 +207,7 @@ class DetSolver(BaseSolver):
     def val(self):
         self.eval()
 
+        log_file = self.output_dir.joinpath("log.txt")
         module = self.ema.module if self.ema else self.model
         test_stats, coco_evaluator = evaluate(
             module,
@@ -216,7 +217,7 @@ class DetSolver(BaseSolver):
             self.evaluator,
             self.device,
             output_dir=self.output_dir,
-            log_file=self.output_dir.joinpath("log.txt"),
+            log_file=log_file,
         )
 
         if self.output_dir:
@@ -224,5 +225,16 @@ class DetSolver(BaseSolver):
                 torch.save(coco_evaluator.coco_eval["bbox"].eval, self.output_dir.joinpath("eval.pth"))
                 with open(self.output_dir.joinpath("predictions.json"), "w") as f:
                     json.dump(coco_evaluator.predictions["bbox"], f)
+
+                # The summary table above is already teed into log.txt; this line
+                # closes it out with the same numbers in a parsable form.
+                log_stats = {
+                    **{f"test_{k}": v for k, v in test_stats.items()},
+                    "checkpoint": str(self.cfg.resume),
+                    "config": self.cfg.yaml_cfg.get("config"),  # train.py folds -c into the config
+                }
+                with log_file.open("a") as f:
+                    f.write(json.dumps(log_stats) + "\n")
+                print(f"Results written to {log_file}")
 
         return

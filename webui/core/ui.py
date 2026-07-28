@@ -93,6 +93,8 @@ def status_markdown(state):
     else:
         return "⚪ **idle**"
     parts = [head]
+    if state["running"] and meta.get("pid"):
+        parts.append(f"pid `{meta['pid']}`")
     if meta.get("started"):
         parts.append(f"started `{meta['started']}`")
     if meta.get("outdir"):
@@ -100,35 +102,33 @@ def status_markdown(state):
     return " · ".join(parts)
 
 
-def view():
-    """(status, log text, may start, may stop, change key) for the current job."""
-    state = JOB.status()
-    key = (state["cursor"], state["running"], state["meta"].get("exit_code"))
-    log = "\n".join(state["lines"][-LOG_TAIL:])
-    return status_markdown(state), log, not state["running"], state["running"], key
+def paint():
+    """The console outputs: ``[status, log, change key]``.
 
-
-def make_refresh(start_button_count):
-    """Timer handler: repaint the console, or skip when nothing moved.
-
-    Outputs are ``[status, log, *start buttons, stop button, key]``.
+    Every handler returns this, so a click lands immediately instead of waiting
+    for the next tick -- a button that takes a second to react reads as broken.
     """
+    state = JOB.status()
+    # .get: a job carried across a hot reload answers with its old code.
+    key = (state["cursor"], state.get("size", 0), state["running"], state["meta"].get("exit_code"))
+    return [status_markdown(state), "\n".join(state["lines"][-LOG_TAIL:]), key]
 
-    def refresh(seen):
-        status, log, may_start, may_stop, key = view()
-        if key == seen:
-            return [gr.skip()] * (start_button_count + 4)
-        starts = [gr.update(interactive=may_start)] * start_button_count
-        return [status, log, *starts, gr.update(interactive=may_stop), key]
 
-    return refresh
+def refresh(seen):
+    """Timer handler: repaint the console, or skip when nothing moved."""
+    outputs = paint()
+    return [gr.skip()] * 3 if outputs[-1] == seen else outputs
 
 
 # --------------------------------------------------------------------------- #
 # Actions
 # --------------------------------------------------------------------------- #
+# Buttons stay clickable at all times: a greyed-out button that does nothing
+# when the job it is waiting on never exits (torchrun hanging on shutdown is
+# the usual one) is indistinguishable from a broken page. Every click either
+# does something or says why it did not.
 def make_start(feature, names):
-    """Click handler: form values in, running job out (the timer paints it)."""
+    """Click handler: form values in, running job out, console repainted."""
 
     def start(*values):
         params = dict(zip(names, values))
@@ -145,6 +145,7 @@ def make_start(feature, names):
         if not ok:
             raise gr.Error(message)
         gr.Info(f"{feature.label} started")
+        return paint()
 
     return start
 
@@ -152,6 +153,12 @@ def make_start(feature, names):
 def stop():
     ok, message = JOB.stop()
     (gr.Info if ok else gr.Warning)(message)
+    return paint()
+
+
+def clear():
+    JOB.clear()
+    return paint()
 
 
 def make_rescan(fields):

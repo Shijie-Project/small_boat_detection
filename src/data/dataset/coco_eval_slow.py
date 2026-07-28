@@ -86,9 +86,12 @@ class CocoEvaluatorSlow:
         for coco_eval in self.coco_eval.values():
             coco_eval.accumulate()
 
-    def summarize(self):
+    def summarize(self, print_func=None):
+        """``print_func`` (e.g. a tee onto log.txt) also captures the summary in a file."""
+        emit = print_func or print
         for iou_type, coco_eval in self.coco_eval.items():
-            print(f"IoU metric: {iou_type}")
+            coco_eval.print_function = emit
+            emit(f"IoU metric: {iou_type}")
             coco_eval.summarize()
 
     def prepare(self, predictions, iou_type):

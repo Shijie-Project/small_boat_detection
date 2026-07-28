@@ -21,7 +21,7 @@ import gradio as gr
 
 from webui.core.discovery import options
 from webui.core.paths import HOST, PORT, ROOT
-from webui.core.ui import CONSOLE_CSS, flatten, make_refresh, make_rescan, make_start, stop
+from webui.core.ui import CONSOLE_CSS, clear, flatten, make_rescan, make_start, refresh, stop
 from webui.features import all_features
 
 
@@ -31,7 +31,7 @@ TITLE = "Small Boat Detection"
 def build_ui():
     opts = options()
     features = all_features()
-    start_buttons = []
+    pending_starts = []  # wired once the console components exist
     choice_fields = []
     choice_components = []
 
@@ -48,24 +48,21 @@ def build_ui():
                             inputs = feature.panel(opts)
                             names = list(inputs)
                             button = gr.Button(f"Start {feature.label}", variant="primary")
-                            button.click(
-                                make_start(feature, names),
-                                inputs=[inputs[name] for name in names],
-                                outputs=[],
-                            )
-                            start_buttons.append(button)
+                            pending_starts.append((button, feature, names, [inputs[n] for n in names]))
                             for field in flatten(feature.fields):
                                 if field.kind == "choice":
                                     choice_fields.append(field)
                                     choice_components.append(inputs[field.name])
 
                 with gr.Row():
-                    stop_button = gr.Button("Stop", variant="stop", interactive=False)
+                    stop_button = gr.Button("Stop", variant="stop")
                     rescan_button = gr.Button("↻ Rescan", variant="secondary")
                 gr.Markdown(f"<sub>root: `{ROOT}`</sub>")
 
             with gr.Column(scale=7):
-                status = gr.Markdown("⚪ **idle**")
+                with gr.Row():
+                    status = gr.Markdown("⚪ **idle**")
+                    clear_button = gr.Button("Clear console", size="sm", scale=0, min_width=140)
                 log = gr.Textbox(
                     label="log",
                     lines=30,
@@ -77,16 +74,15 @@ def build_ui():
                     elem_classes="console",
                 )
 
-        stop_button.click(stop, outputs=[])
-        rescan_button.click(make_rescan(choice_fields), outputs=choice_components)
-
         seen = gr.State(())
-        gr.Timer(1.0).tick(
-            make_refresh(len(start_buttons)),
-            inputs=[seen],
-            outputs=[status, log, *start_buttons, stop_button, seen],
-            show_progress="hidden",
-        )
+        console = [status, log, seen]
+
+        for button, feature, names, components in pending_starts:
+            button.click(make_start(feature, names), inputs=components, outputs=console)
+        stop_button.click(stop, outputs=console)
+        clear_button.click(clear, outputs=console)
+        rescan_button.click(make_rescan(choice_fields), outputs=choice_components)
+        gr.Timer(1.0).tick(refresh, inputs=[seen], outputs=console, show_progress="hidden")
 
     return demo
 
