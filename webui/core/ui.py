@@ -12,7 +12,7 @@ from contextlib import nullcontext
 import gradio as gr
 
 from .discovery import options
-from .jobs import JOB
+from .jobs import job
 from .paths import ROOT
 
 
@@ -33,7 +33,7 @@ CONSOLE_CSS = """
 # --------------------------------------------------------------------------- #
 def choices_of(field, opts):
     """Dropdown choices for ``field``, blank option first when it is optional."""
-    values = list(opts.get(field.source, []))
+    values = list(field.choices) if field.choices else list(opts.get(field.source, []))
     blank = [(field.empty_label, "")] if field.optional else []
     return blank + [(value, value) for value in values], values
 
@@ -51,6 +51,8 @@ def default_of(field, values):
 
 
 def component_of(field, opts):
+    if field.kind == "flag":
+        return gr.Checkbox(value=bool(field.value), label=field.label, info=field.info or None)
     if field.kind != "choice":
         return gr.Textbox(value=field.value, label=field.label, info=field.info or None)
     choices, values = choices_of(field, opts)
@@ -97,27 +99,33 @@ def status_markdown(state):
         parts.append(f"pid `{meta['pid']}`")
     if meta.get("started"):
         parts.append(f"started `{meta['started']}`")
+    if state["running"] and meta.get("url"):
+        parts.append(f"[{meta['url']}]({meta['url']})")
     if meta.get("outdir"):
         parts.append(f"output `{meta['outdir']}`")
     return " · ".join(parts)
 
 
-def paint():
-    """The console outputs: ``[status, log, change key]``.
+def paint(slot):
+    """One slot's console outputs: ``[status, log, change key]``.
 
     Every handler returns this, so a click lands immediately instead of waiting
     for the next tick -- a button that takes a second to react reads as broken.
     """
-    state = JOB.status()
+    state = job(slot).status()
     # .get: a job carried across a hot reload answers with its old code.
     key = (state["cursor"], state.get("size", 0), state["running"], state["meta"].get("exit_code"))
     return [status_markdown(state), "\n".join(state["lines"][-LOG_TAIL:]), key]
 
 
-def refresh(seen):
+def make_refresh(slot):
     """Timer handler: repaint the console, or skip when nothing moved."""
-    outputs = paint()
-    return [gr.skip()] * 3 if outputs[-1] == seen else outputs
+
+    def refresh(seen):
+        outputs = paint(slot)
+        return [gr.skip()] * 3 if outputs[-1] == seen else outputs
+
+    return refresh
 
 
 # --------------------------------------------------------------------------- #
@@ -141,24 +149,30 @@ def make_start(feature, names):
         env.update(spec.env)
         env["PYTHONUNBUFFERED"] = "1"
 
-        ok, message = JOB.start(spec.cmd, env=env, meta=spec.meta, cwd=ROOT)
+        ok, message = job(feature.slot).start(spec.cmd, env=env, meta=spec.meta, cwd=ROOT, notes=spec.notes)
         if not ok:
             raise gr.Error(message)
         gr.Info(f"{feature.label} started")
-        return paint()
+        return paint(feature.slot)
 
     return start
 
 
-def stop():
-    ok, message = JOB.stop()
-    (gr.Info if ok else gr.Warning)(message)
-    return paint()
+def make_stop(slot):
+    def stop():
+        ok, message = job(slot).stop()
+        (gr.Info if ok else gr.Warning)(message)
+        return paint(slot)
+
+    return stop
 
 
-def clear():
-    JOB.clear()
-    return paint()
+def make_clear(slot):
+    def clear():
+        job(slot).clear()
+        return paint(slot)
+
+    return clear
 
 
 def make_rescan(fields):
@@ -167,7 +181,10 @@ def make_rescan(fields):
     def rescan():
         opts = options()
         updates = [gr.update(choices=choices_of(field, opts)[0]) for field in fields]
-        gr.Info(f"{len(opts['configs'])} configs · {len(opts['checkpoints'])} checkpoints")
+        gr.Info(
+            f"{len(opts['configs'])} configs · {len(opts['checkpoints'])} checkpoints"
+            f" · {len(opts['satellite'])} images"
+        )
         return updates[0] if len(updates) == 1 else updates
 
     return rescan

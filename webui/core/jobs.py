@@ -1,8 +1,11 @@
-"""Runs one child process at a time and keeps its output in a ring buffer.
+"""Runs one child process per slot and keeps its output in a ring buffer.
 
 Training and testing both want every GPU on the box, so the dashboard
-deliberately serialises them: starting a job while another is running is
-refused rather than queued.
+deliberately serialises them: starting a job while another is running in the
+same slot is refused rather than queued. A slot is that mutual exclusion --
+features that compete for the same machine share one, features that do not get
+their own. Long-lived servers (Label Studio) sit in ``service`` so that leaving
+one up does not block the GPU work in ``run``.
 """
 
 import os
@@ -20,6 +23,12 @@ from .paths import ROOT
 
 MAX_LINES = 5000
 STATE_MODULE = "_webui_job_state"
+
+RUN_SLOT = "run"  # one at a time: they fight over the GPUs
+SERVICE_SLOT = "service"  # stays up until stopped
+DATA_SLOT = "data"  # CPU-bound data prep; no reason to wait for a GPU
+SLOTS = (RUN_SLOT, SERVICE_SLOT, DATA_SLOT)
+SLOT_LABELS = {RUN_SLOT: "Train / test", SERVICE_SLOT: "Services", DATA_SLOT: "Data prep"}
 
 
 def _popen_kwargs():
@@ -80,7 +89,7 @@ class Job:
             self._lines.clear()
 
     # -- lifecycle -------------------------------------------------------- #
-    def start(self, cmd, env=None, meta=None, cwd=ROOT):
+    def start(self, cmd, env=None, meta=None, cwd=ROOT, notes=()):
         if self.is_running():
             return False, "A job is already running. Stop it first."
 
@@ -93,6 +102,8 @@ class Job:
             self._meta["started"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             self._meta["exit_code"] = None
         self._emit("$ " + " ".join(cmd))
+        for note in notes:
+            self._emit(note)
         self._emit("")
 
         try:
@@ -146,8 +157,8 @@ class Job:
         return True, "stopping"
 
 
-def _shared_job():
-    """The one job of this interpreter, carried across gradio's hot reload.
+def _shared_jobs():
+    """One job per slot, carried across gradio's hot reload.
 
     Reloading drops every module under ``webui/`` from ``sys.modules``, so a
     plain module-level singleton would come back empty and we would lose the
@@ -162,11 +173,24 @@ def _shared_job():
     if state is None:
         state = types.ModuleType(STATE_MODULE)
         sys.modules[STATE_MODULE] = state
-    job = getattr(state, "job", None)
-    if job is None or not job.is_running():
-        job = Job()
-        state.job = job
-    return job
+    jobs = getattr(state, "jobs", None)
+    if jobs is None:
+        # Reloading over a pre-slot server: adopt its job rather than orphan it.
+        legacy = getattr(state, "job", None)
+        jobs = {RUN_SLOT: legacy} if legacy is not None and legacy.is_running() else {}
+        state.jobs = jobs
+    for slot in SLOTS:
+        if slot not in jobs or not jobs[slot].is_running():
+            jobs[slot] = Job()
+    return jobs
 
 
-JOB = _shared_job()
+JOBS = _shared_jobs()
+
+
+def job(slot=RUN_SLOT):
+    """The job of one slot. A slot we have not seen gets one, never a KeyError."""
+    existing = JOBS.get(slot)
+    if existing is None:
+        existing = JOBS[slot] = Job()
+    return existing

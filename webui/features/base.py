@@ -10,6 +10,7 @@ import sys
 import time
 from dataclasses import dataclass
 
+from ..core.jobs import RUN_SLOT
 from ..core.paths import TRAIN_SCRIPT, resolve
 
 
@@ -17,16 +18,19 @@ from ..core.paths import TRAIN_SCRIPT, resolve
 class Field:
     """One control in a feature's form.
 
-    ``kind="choice"`` renders a dropdown filled from :mod:`webui.core.discovery`
-    (``source`` is the key: ``"configs"`` / ``"checkpoints"``); anything else is
-    a text box. ``value`` is the default -- for a dropdown, the option to start
-    on -- and ``prefer`` is a regex fallback for when that option is missing.
+    ``kind="choice"`` renders a dropdown, filled either from :mod:`discovery
+    <webui.core.discovery>` (``source`` is the key: ``"configs"`` /
+    ``"checkpoints"`` / ``"satellite"``) or from a fixed ``choices`` tuple;
+    ``kind="flag"`` renders a checkbox; anything else is a text box. ``value``
+    is the default -- for a dropdown, the option to start on -- and ``prefer``
+    is a regex fallback for when that option is missing.
     """
 
     name: str
     label: str
     kind: str = "text"
     source: str = ""
+    choices: tuple = ()
     value: str = ""
     prefer: str = ""
     optional: bool = False
@@ -35,12 +39,17 @@ class Field:
 
 
 class JobSpec:
-    """A command line, the environment tweaks it needs, and what to show about it."""
+    """A command line, the environment tweaks it needs, and what to show about it.
 
-    def __init__(self, cmd, env=None, meta=None):
+    ``notes`` are lines printed to the console above the job's own output --
+    anything the user has to do by hand once it is up.
+    """
+
+    def __init__(self, cmd, env=None, meta=None, notes=()):
         self.cmd = cmd
         self.env = dict(env or {})
         self.meta = dict(meta or {})
+        self.notes = list(notes)
 
 
 class Feature:
@@ -48,12 +57,16 @@ class Feature:
 
     Subclasses set ``name``/``label``/``fields`` and implement :meth:`build`.
     Override :meth:`panel` for a tab that needs more than the declared fields.
+
+    ``slot`` says what the feature competes with (see :mod:`webui.core.jobs`):
+    the default puts it in ``run`` with the other GPU work, one at a time.
     """
 
     name = ""
     label = ""
     description = ""
     fields = ()
+    slot = RUN_SLOT
 
     def build(self, params) -> JobSpec:
         raise NotImplementedError
@@ -78,19 +91,28 @@ def text(params, key):
     return "" if value is None else str(value).strip()
 
 
+def flag(params, key):
+    """One checkbox as a bool."""
+    return bool(params.get(key))
+
+
 def python_executable(params):
     return text(params, "python") or sys.executable
 
 
-def positive_int(params, key, default):
+def whole_int(params, key, default, minimum=1):
     raw = text(params, key) or str(default)
     try:
         value = int(raw)
     except ValueError:
         raise ValueError(f"{key} must be a number, got {raw!r}") from None
-    if value < 1:
-        raise ValueError(f"{key} must be >= 1, got {value}")
+    if value < minimum:
+        raise ValueError(f"{key} must be >= {minimum}, got {value}")
     return value
+
+
+def positive_int(params, key, default):
+    return whole_int(params, key, default, minimum=1)
 
 
 def existing_file(params, key, kind, required=True):

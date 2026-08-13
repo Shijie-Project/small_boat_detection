@@ -16,7 +16,9 @@ STATIC_DIR = PACKAGE_DIR / "static"
 CONFIG_DIR = ROOT / "configs" / "dome"
 CKPT_DIRS = ROOT.parent / "ckpts"
 DATA_DIRS = ROOT.parent / "data"
+SATELLITE_DIR = DATA_DIRS / "satellite_images"
 TRAIN_SCRIPT = "train.py"
+TILE_SCRIPT = "tools/dataset/tile_satellite.py"
 
 # The trees the UI lists from, and therefore the only ones it may hand back.
 ALLOWED_ROOTS = (ROOT, CKPT_DIRS, DATA_DIRS)
