@@ -11,8 +11,9 @@ from .paths import CKPT_DIRS, CONFIG_DIR, ROOT, SATELLITE_DIR, rel
 
 
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".tif", ".tiff")
+SPLIT_DIRNAME = "split_images"  # must match tile_satellite.py
 # Output of the tiler and of tiled inference -- thousands of files, never inputs.
-SKIP_DIRS = ("split_images", "crops")
+SKIP_DIRS = (SPLIT_DIRNAME, "crops")
 
 
 def generated(name):
@@ -27,9 +28,16 @@ def list_configs():
 
 
 def list_checkpoints():
+    """The weights worth picking: a run's ``best_stg*.pth`` and the kept ``*-best.pth``.
+
+    The second half is what inference actually runs -- the checkpoints promoted
+    out of a run folder and given a name (``Dome-M-AEA-best.pth``).
+    """
     out = []
     if CKPT_DIRS.is_dir():
-        out.extend(rel(p) for p in sorted(CKPT_DIRS.rglob("*.pth")) if p.stem.startswith("best_"))
+        out.extend(
+            rel(p) for p in sorted(CKPT_DIRS.rglob("*.pth")) if p.stem.startswith("best_") or p.stem.endswith("-best")
+        )
     return out
 
 
@@ -51,12 +59,44 @@ def list_satellite_images(limit=200):
     return found
 
 
+def holds_images(path):
+    """True if this folder has image files of its own."""
+    try:
+        return any(name.lower().endswith(IMAGE_SUFFIXES) for name in os.listdir(path))
+    except OSError:
+        return False
+
+
+def list_tile_dirs(limit=200):
+    """What inference can be pointed at: each ``split_images/<scene>/``, root first.
+
+    The root stands for "every scene under it" -- the inference script's
+    ``--all``. Our own ``inf_det/`` output is not an input, so it never shows up.
+    """
+    if not SATELLITE_DIR.is_dir():
+        return []
+    found = []
+    for root, dirs, _ in os.walk(SATELLITE_DIR):
+        if os.path.basename(root) == SPLIT_DIRNAME:
+            scenes = [d for d in sorted(dirs) if not generated(d) and holds_images(os.path.join(root, d))]
+            if scenes:
+                found.append(rel(root))
+                found += [rel(os.path.join(root, d)) for d in scenes]
+            dirs[:] = []  # the scenes themselves hold nothing but tiles
+        else:  # descend, but only into split_images once we reach it
+            dirs[:] = sorted(d for d in dirs if not generated(d) or d == SPLIT_DIRNAME)
+        if len(found) >= limit:
+            break
+    return found
+
+
 def options():
     """Everything the page needs to build its forms."""
     return {
         "configs": list_configs(),
         "checkpoints": list_checkpoints(),
         "satellite": list_satellite_images(),
+        "tiles": list_tile_dirs(),
         "python": sys.executable,
         "root": str(ROOT),
     }

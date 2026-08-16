@@ -35,17 +35,16 @@ webui/
     ├── train.py
     ├── test.py
     ├── tile.py            cut satellite imagery into tiles (tools/dataset/tile_satellite.py)
-    ├── regions.py         the same cut, but only the rectangles you draw on the preview
+    ├── inference.py       detect on a folder of tiles (tools/inference/torch_inf_dir.py)
     └── label_studio.py    the annotation server, same as `tools/starter.sh label-studio`
 ```
 
-**Manual split** (`features/regions.py`) is the tab that is more than a form. It shrinks the
-whole scene to a preview, turns two clicks into a rectangle in source pixels, and runs
-`tile_satellite.py --regions <file>` so only those rectangles are cut — a scene that grids
-into 3000 mostly-empty tiles gives 20 useful ones. The rectangles are saved as
-`split_images/<image>/regions.json` beside the tiles, so the same cut repeats from the
-command line. The click maths lives in `on_click`; the counts under the preview come from
-the tiler's own window functions, so what the page promises is what the script writes.
+**Inference** runs on what **Split images** produced, so its dropdown lists tile folders
+rather than images: a `split_images/<scene>/`, or `split_images/` itself for every scene at
+once. That second case is the script's `--all`, which the tab always passes when the folder
+holds scenes rather than tiles — a job started from a browser has no stdin, and the script
+would otherwise stop to ask which scene it meant. It shares the `run` slot with train and
+test, since it wants the same GPU.
 
 The console repaints on a 1 s `gr.Timer`, so the page always reflects the real job —
 reload the browser, open a second tab, or hot reload the server and it picks up again.
