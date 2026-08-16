@@ -20,6 +20,7 @@ SATELLITE_DIR = DATA_DIRS / "satellite_images"
 TRAIN_SCRIPT = "train.py"
 TILE_SCRIPT = "tools/dataset/tile_satellite.py"
 INFER_SCRIPT = "tools/inference/torch_inf_dir.py"
+LS_IMPORT_SCRIPT = "tools/annotation/predictions_to_annotations.py"
 
 # The trees the UI lists from, and therefore the only ones it may hand back.
 ALLOWED_ROOTS = (ROOT, CKPT_DIRS, DATA_DIRS)

@@ -17,6 +17,11 @@ runs; image splitting is CPU work and gets `data`. All three can run at once. Th
 on the right has one tab per slot. Adding a slot is adding a name to `SLOTS` in
 `core/jobs.py` — the layout follows.
 
+A form has one button, Start. Stop lives in the console tab instead, next to the log of
+the thing it kills: a slot runs one job at a time, so a Stop per feature was several
+buttons for one process, and the tab you started from is not necessarily the tab you are
+looking at when you want it to end.
+
 A job started before a hot reload keeps going, keeps streaming, and can still be stopped
 (see `_shared_jobs()` in `core/jobs.py`).
 
@@ -36,7 +41,8 @@ webui/
     ├── test.py
     ├── tile.py            cut satellite imagery into tiles (tools/dataset/tile_satellite.py)
     ├── inference.py       detect on a folder of tiles (tools/inference/torch_inf_dir.py)
-    └── label_studio.py    the annotation server, same as `tools/starter.sh label-studio`
+    ├── label_studio.py    the annotation server, same as `tools/starter.sh label-studio`
+    └── ls_import.py       predictions.json -> annotations in the LS project
 ```
 
 **Inference** runs on what **Split images** produced, so its dropdown lists tile folders
@@ -45,6 +51,13 @@ once. That second case is the script's `--all`, which the tab always passes when
 holds scenes rather than tiles — a job started from a browser has no stdin, and the script
 would otherwise stop to ask which scene it meant. It shares the `run` slot with train and
 test, since it wants the same GPU.
+
+**Import to LS** is the step after that: the `predictions.json` an inference run wrote
+becomes annotations in the Label Studio project, one per task whose image the file
+mentions. It talks to the running server rather than the database, so Label Studio has to
+be up — it is the only feature that depends on another one. Dry run is ticked by default,
+because this writes into live annotation work; `Undo instead` removes what an earlier
+import created (every imported box carries an id starting with `pred`).
 
 The console repaints on a 1 s `gr.Timer`, so the page always reflects the real job —
 reload the browser, open a second tab, or hot reload the server and it picks up again.
@@ -61,9 +74,8 @@ it started with (edits there land once it finishes).
    `build(params) -> JobSpec`, reusing the helpers in `features/base.py`. Raise
    `ValueError` for bad input — it shows up as an error toast.
 1. Register it in `features/__init__.py` (`FEATURES`).
-1. Set `slot` if it does not belong with the GPU work (the default is `run`). A feature
-   outside `run` gets its own Stop button in its tab, since the shared one below the tabs
-   stops the run slot.
+1. Set `slot` if it does not belong with the GPU work (the default is `run`). A slot it is
+   the first to use gets its own console tab, Stop button included; nothing else to wire.
 
 That is the whole story for a form-shaped feature. Fields render as a text box, a dropdown
 (`kind="choice"`, from a discovery `source` or a literal `choices` tuple), or a checkbox

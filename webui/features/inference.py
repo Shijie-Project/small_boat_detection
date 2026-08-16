@@ -3,7 +3,9 @@
 The step after **Split images**. Pick the ``split_images/<scene>/`` folder the
 tiler wrote, pick a checkpoint, and the detector runs over every tile in it and
 stitches the boxes back onto the full scene (``tiles.json`` says where each tile
-came from). Results land in ``<folder>/inf_det/``.
+came from). Results land in ``<folder>/inf_det/``: a ``predictions.json`` in the
+COCO results format the eval and Label Studio tools already read, plus the
+merged full-image boxes and the drawings.
 
 Pointing at ``split_images/`` itself rather than one scene runs the lot -- the
 script's ``--all``, which the form supplies for you, since a job started from a
@@ -31,7 +33,7 @@ from .base import (
 
 
 OUT_DIRNAME = "inf_det"  # must match torch_inf_dir.py
-DEFAULT_CATEGORIES = "../data/annotations/val_coco.json"
+DEFAULT_COCO = "../data/annotations/val_coco.json"
 
 
 def has_tiles(path):
@@ -89,9 +91,11 @@ class InferenceFeature(Feature):
         "Detect boats in a folder of tiles. Every tile goes through the net at its "
         "original resolution, the boxes are shifted back into full-image coordinates "
         "using `tiles.json`, boats cut by a tile border are stitched, and duplicates "
-        "go to a global NMS. Output in `<folder>/inf_det/`: `detections.json` (per "
-        "tile **and** merged), `detections.csv`, the tiles that hit with boxes drawn, "
-        "and an overlay of the whole scene."
+        "go to a global NMS. Output in `<folder>/inf_det/`: `predictions.json` (COCO "
+        "results, per tile — what `per_image_metrics.py` and the Label Studio import "
+        "read), `detections.json` (per tile **and** merged into full-image "
+        "coordinates), `detections.csv`, the tiles that hit with boxes drawn, and an "
+        "overlay of the whole scene."
     )
     fields = [
         Field(
@@ -125,10 +129,10 @@ class InferenceFeature(Feature):
         [
             Field("classes", "Classes (--classes)", value="3", info="Blank keeps every class."),
             Field(
-                "categories",
-                "Class names from (--categories)",
-                value=DEFAULT_CATEGORIES,
-                info="COCO json, for readable labels. Blank: ids only.",
+                "coco",
+                "Annotations json (--coco)",
+                value=DEFAULT_COCO,
+                info="Class names, and the image_id a listed tile keeps in predictions.json.",
             ),
         ],
         [
@@ -171,7 +175,7 @@ class InferenceFeature(Feature):
         tiles, path, every = tile_folder(params)
         config = config_path(params)
         checkpoint = existing_file(params, "checkpoint", "checkpoint (-r)")
-        categories = existing_file(params, "categories", "categories json", required=False)
+        coco = existing_file(params, "coco", "annotations json", required=False)
 
         cmd = [
             python_executable(params),
@@ -200,8 +204,8 @@ class InferenceFeature(Feature):
         cmd += class_args(params)
         if every:  # no stdin behind a browser, so never let the script ask
             cmd.append("--all")
-        if categories:
-            cmd += ["--categories", categories]
+        if coco:
+            cmd += ["--coco", coco]
 
         output = text(params, "output")
         if output:

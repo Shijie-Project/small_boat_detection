@@ -7,11 +7,12 @@ and served through a single ``/api/options`` endpoint.
 import os
 import sys
 
-from .paths import CKPT_DIRS, CONFIG_DIR, ROOT, SATELLITE_DIR, rel
+from .paths import CKPT_DIRS, CONFIG_DIR, DATA_DIRS, ROOT, SATELLITE_DIR, rel
 
 
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".tif", ".tiff")
 SPLIT_DIRNAME = "split_images"  # must match tile_satellite.py
+OUT_DIRNAME = "inf_det"  # must match torch_inf_dir.py: holds the predictions we import
 # Output of the tiler and of tiled inference -- thousands of files, never inputs.
 SKIP_DIRS = (SPLIT_DIRNAME, "crops")
 
@@ -90,6 +91,27 @@ def list_tile_dirs(limit=200):
     return found
 
 
+def list_prediction_files(limit=200):
+    """COCO results files worth importing: every inference run's, then the split ones.
+
+    The inference runs come first because they are the ones written from the
+    dashboard; ``<split>_preds.json`` is what ``train.py --test-only`` leaves in
+    the annotations folder.
+    """
+    found = []
+    if SATELLITE_DIR.is_dir():
+        for root, dirs, files in os.walk(SATELLITE_DIR):
+            dirs[:] = sorted(d for d in dirs if not generated(d) or d in (SPLIT_DIRNAME, OUT_DIRNAME))
+            if "predictions.json" in files:
+                found.append(rel(os.path.join(root, "predictions.json")))
+            if len(found) >= limit:
+                return found
+    annotations = DATA_DIRS / "annotations"
+    if annotations.is_dir():
+        found += [rel(p) for p in sorted(annotations.glob("*_preds.json"))]
+    return found[:limit]
+
+
 def options():
     """Everything the page needs to build its forms."""
     return {
@@ -97,6 +119,7 @@ def options():
         "checkpoints": list_checkpoints(),
         "satellite": list_satellite_images(),
         "tiles": list_tile_dirs(),
+        "predictions": list_prediction_files(),
         "python": sys.executable,
         "root": str(ROOT),
     }
