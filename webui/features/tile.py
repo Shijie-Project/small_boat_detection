@@ -9,6 +9,9 @@ from ..core.paths import SATELLITE_DIR, TILE_SCRIPT, rel, resolve
 from .base import Feature, Field, JobSpec, flag, positive_int, python_executable, text, whole_int
 
 
+BLACK_PCT_DEFAULT = 99  # a tile this black is background, not water
+
+
 SPLIT_DIRNAME = "split_images"  # must match tile_satellite.py
 
 
@@ -36,6 +39,14 @@ def output_root(params, source):
     return value, rel(value)
 
 
+def black_fraction(params):
+    """The "how black is background" percentage, as the fraction the script takes."""
+    percent = whole_int(params, "black_pct", BLACK_PCT_DEFAULT, minimum=1)
+    if percent > 100:
+        raise ValueError(f"black threshold must be <= 100, got {percent}")
+    return f"{percent / 100:.4f}"
+
+
 class TileFeature(Feature):
     name = "tile"
     label = "Split images"
@@ -43,7 +54,9 @@ class TileFeature(Feature):
     description = (
         "Pad each satellite image out to a whole number of tiles and cut it into "
         "a grid, at original resolution. Tiles land in `<folder>/split_images/"
-        "<image>/`, next to a `tiles.json` recording where each one came from."
+        "<image>/`, next to a `tiles.json` recording where each one came from. "
+        "Tiles that are nothing but the black background are thrown away as they "
+        "are cut, so nothing empty reaches the annotation step."
     )
     fields = [
         Field(
@@ -70,6 +83,21 @@ class TileFeature(Feature):
                 "Skip blank tiles",
                 kind="flag",
                 info="Drop tiles that are one flat colour (padding, no-data).",
+            ),
+        ],
+        [
+            Field(
+                "drop_black",
+                "Delete black background",
+                kind="flag",
+                value="1",
+                info="Throw away the all-black tiles around the imagery.",
+            ),
+            Field(
+                "black_pct",
+                "Black threshold (%)",
+                value=str(BLACK_PCT_DEFAULT),
+                info="A tile at least this black goes; 100 keeps anything with a lit pixel.",
             ),
         ],
     ]
@@ -99,6 +127,8 @@ class TileFeature(Feature):
             cmd += ["-o", output]
         if flag(params, "skip_blank"):
             cmd.append("--skip-blank")
+        if flag(params, "drop_black"):
+            cmd += ["--drop-black", "--black-frac", black_fraction(params)]
 
         meta = {"feature": self.name, "source": source, "outdir": outdir, "cmd": " ".join(cmd)}
         return JobSpec(cmd, meta=meta)
