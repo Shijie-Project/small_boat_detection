@@ -36,7 +36,7 @@ def score(params, key, default):
 
 class LabelStudioImportFeature(Feature):
     name = "ls-import"
-    label = "Import to LS"
+    label = "LS import"
     slot = DATA_SLOT
     description = (
         "Turn a `predictions.json` into Label Studio annotations. Every task in "

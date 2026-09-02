@@ -37,6 +37,15 @@ from webui.features import all_features
 TITLE = "Small Boat Detection"
 
 
+def make_console_visibility(feature):
+    """Tab handler: the console hides for a ``wide`` feature and comes back after."""
+
+    def visibility():
+        return gr.update(visible=not feature.wide)
+
+    return visibility
+
+
 def slots_of(features):
     """The slots in use, in :data:`SLOTS` order; anything unlisted comes last."""
     used = list(dict.fromkeys(feature.slot for feature in features))
@@ -55,11 +64,15 @@ def build_ui():
     with gr.Blocks(title=TITLE, fill_width=True) as demo:
         gr.Markdown(f"### {TITLE} — train / test / annotate")
 
+        tabs = []  # (tab, feature), wired once the console column exists
         with gr.Row():
-            with gr.Column(scale=4, min_width=380):
+            # 5/6 rather than 4/7: nine tab labels have to fit across the top of
+            # this column, and Gradio hides the ones that do not behind a "...".
+            with gr.Column(scale=5, min_width=380):
                 with gr.Tabs():
                     for feature in features:
-                        with gr.Tab(feature.label):
+                        with gr.Tab(feature.label) as tab:
+                            tabs.append((tab, feature))
                             if feature.description:
                                 gr.Markdown(feature.description)
                             inputs = feature.panel(opts)
@@ -69,14 +82,14 @@ def build_ui():
                             button = gr.Button(f"Start {feature.label}", variant="primary")
                             pending_starts.append((button, feature, names, [inputs[n] for n in names]))
                             for field in flatten(feature.fields):
-                                if field.kind == "choice":
+                                if field.kind in ("choice", "multichoice"):
                                     choice_fields.append(field)
                                     choice_components.append(inputs[field.name])
 
                 rescan_button = gr.Button("↻ Rescan", variant="secondary")
                 gr.Markdown(f"<sub>root: `{ROOT}`</sub>")
 
-            with gr.Column(scale=7):
+            with gr.Column(scale=6) as console_column:
                 with gr.Tabs():
                     for slot in slots:
                         with gr.Tab(SLOT_LABELS.get(slot, slot)):
@@ -102,6 +115,10 @@ def build_ui():
             console = consoles[feature.slot]
             button.click(make_start(feature, names), inputs=components, outputs=console)
         rescan_button.click(make_rescan(choice_fields), outputs=choice_components)
+        # A wide feature takes the whole page: the console it would share the
+        # row with is worth less than the pixels while you are working in it.
+        for tab, feature in tabs:
+            tab.select(make_console_visibility(feature), outputs=console_column)
         for slot, console in consoles.items():
             gr.Timer(1.0).tick(
                 make_refresh(slot),

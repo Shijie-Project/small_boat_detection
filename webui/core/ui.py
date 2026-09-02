@@ -32,9 +32,12 @@ CONSOLE_CSS = """
 # Forms
 # --------------------------------------------------------------------------- #
 def choices_of(field, opts):
-    """Dropdown choices for ``field``, blank option first when it is optional."""
+    """Dropdown choices for ``field``, blank option first when it is optional.
+
+    A multi-select has no blank option: picking nothing is how it says nothing.
+    """
     values = list(field.choices) if field.choices else list(opts.get(field.source, []))
-    blank = [(field.empty_label, "")] if field.optional else []
+    blank = [(field.empty_label, "")] if field.optional and field.kind != "multichoice" else []
     return blank + [(value, value) for value in values], values
 
 
@@ -53,12 +56,22 @@ def default_of(field, values):
 def component_of(field, opts):
     if field.kind == "flag":
         return gr.Checkbox(value=bool(field.value), label=field.label, info=field.info or None)
-    if field.kind != "choice":
+    if field.kind not in ("choice", "multichoice"):
         return gr.Textbox(value=field.value, label=field.label, info=field.info or None)
     choices, values = choices_of(field, opts)
+    chosen = default_of(field, values)
+    if field.kind == "multichoice":
+        # The form hands back a list; ``existing_files`` is the helper that reads it.
+        return gr.Dropdown(
+            choices=choices,
+            value=[chosen] if chosen else [],
+            multiselect=True,
+            label=field.label,
+            info=field.info or None,
+        )
     return gr.Dropdown(
         choices=choices,
-        value=default_of(field, values),
+        value=chosen,
         label=field.label,
         info=field.info or None,
     )

@@ -17,10 +17,14 @@ CONFIG_DIR = ROOT / "configs" / "dome"
 CKPT_DIRS = ROOT.parent / "ckpts"
 DATA_DIRS = ROOT.parent / "data"
 SATELLITE_DIR = DATA_DIRS / "satellite_images"
+IMAGES_DIR = DATA_DIRS / "images"
 TRAIN_SCRIPT = "train.py"
 TILE_SCRIPT = "tools/dataset/tile_satellite.py"
 INFER_SCRIPT = "tools/inference/torch_inf_dir.py"
 LS_IMPORT_SCRIPT = "tools/annotation/predictions_to_annotations.py"
+LS_COCO_SCRIPT = "tools/annotation/ls_to_coco.py"
+SPLIT_SCRIPT = "tools/annotation/random_split_coco.py"
+PICKER_SCRIPT = "tools/dataset/split_picker.py"
 
 # The trees the UI lists from, and therefore the only ones it may hand back.
 ALLOWED_ROOTS = (ROOT, CKPT_DIRS, DATA_DIRS)

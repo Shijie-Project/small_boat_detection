@@ -7,7 +7,10 @@ subclass (fields + ``build``), then list it in ``FEATURES`` below.
 from .base import Feature, Field, JobSpec
 from .inference import InferenceFeature
 from .label_studio import LabelStudioFeature
+from .ls_coco import LabelStudioCocoFeature
 from .ls_import import LabelStudioImportFeature
+from .manual_split import ManualSplitFeature
+from .split_coco import SplitFeature
 from .test import TestFeature
 from .tile import TileFeature
 from .train import TrainFeature
@@ -17,9 +20,12 @@ FEATURES = [
     TrainFeature(),
     TestFeature(),
     TileFeature(),
+    ManualSplitFeature(),
     InferenceFeature(),
     LabelStudioFeature(),
     LabelStudioImportFeature(),
+    LabelStudioCocoFeature(),
+    SplitFeature(),
 ]
 
 

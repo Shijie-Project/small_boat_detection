@@ -21,7 +21,9 @@ class Field:
     ``kind="choice"`` renders a dropdown, filled either from :mod:`discovery
     <webui.core.discovery>` (``source`` is the key: ``"configs"`` /
     ``"checkpoints"`` / ``"satellite"``) or from a fixed ``choices`` tuple;
-    ``kind="flag"`` renders a checkbox; anything else is a text box. ``value``
+    ``kind="multichoice"`` is the same dropdown with several picked at once,
+    handing ``build()`` a list instead of a string; ``kind="flag"`` renders a
+    checkbox; anything else is a text box. ``value``
     is the default -- for a dropdown, the option to start on -- and ``prefer``
     is a regex fallback for when that option is missing.
     """
@@ -60,6 +62,9 @@ class Feature:
 
     ``slot`` says what the feature competes with (see :mod:`webui.core.jobs`):
     the default puts it in ``run`` with the other GPU work, one at a time.
+
+    ``wide`` hides the console while the tab is open, giving the panel the whole
+    page. A form does not need that; a canvas does.
     """
 
     name = ""
@@ -67,6 +72,7 @@ class Feature:
     description = ""
     fields = ()
     slot = RUN_SLOT
+    wide = False
 
     def build(self, params) -> JobSpec:
         raise NotImplementedError
@@ -126,6 +132,28 @@ def existing_file(params, key, kind, required=True):
     if path is None or not path.is_file():
         raise ValueError(f"{kind} not found: {value}")
     return value
+
+
+def existing_files(params, key, kind, required=True):
+    """The same for a ``multichoice``: every picked path, in the order picked.
+
+    Duplicates are dropped -- selecting the same export twice would convert it
+    twice, and the second pass would only replace the first.
+    """
+    value = params.get(key)
+    raw = value if isinstance(value, (list, tuple)) else [value]
+    values = []
+    for item in raw:
+        item = "" if item is None else str(item).strip()
+        if not item or item in values:
+            continue
+        path = resolve(item)
+        if path is None or not path.is_file():
+            raise ValueError(f"{kind} not found: {item}")
+        values.append(item)
+    if not values and required:
+        raise ValueError(f"{kind} is required")
+    return values
 
 
 def config_path(params):
